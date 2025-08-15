@@ -9,6 +9,9 @@ import {
   IFluidValue,
 } from "./index.types";
 
+/**
+ * List of CSS property names that can be interpolated fluidly.
+ */
 const FLUID_PROPERTY_NAMES = [
   "font-size",
   "line-height",
@@ -39,6 +42,9 @@ const FLUID_PROPERTY_NAMES = [
   "max-height",
 ];
 
+/**
+ * List of CSS shorthand property names that are handled separately.
+ */
 const SHORTHAND_PROPERTY_NAMES = [
   "padding",
   "margin",
@@ -46,6 +52,10 @@ const SHORTHAND_PROPERTY_NAMES = [
   "border-radius",
 ];
 
+/**
+ * Initializes FluidScale by parsing all accessible stylesheets.
+ * Logs an error if stylesheets are not accessible (e.g., due to cross-origin restrictions).
+ */
 export default function init(): void {
   if (!isStyleSheetsAccessible()) {
     console.error(
@@ -56,6 +66,10 @@ export default function init(): void {
   parseStylesheets(Array.from(document.styleSheets));
 }
 
+/**
+ * Checks if document.styleSheets is accessible (not blocked by browser security).
+ * @returns {boolean} True if accessible, false otherwise.
+ */
 function isStyleSheetsAccessible() {
   try {
     // Attempt to read document.styleSheets
@@ -66,11 +80,17 @@ function isStyleSheetsAccessible() {
     }
   } catch (e) {
     // Accessing styleSheets may throw a SecurityError for cross-origin styles
+    // Optionally log the error for debugging
+    // console.error('Error accessing styleSheets:', e);
     return false;
   }
   return false;
 }
 
+/**
+ * Parses all provided CSSStyleSheet objects and processes their rules for fluid properties.
+ * @param {CSSStyleSheet[]} sheets - Array of stylesheets to parse.
+ */
 function parseStylesheets(sheets: CSSStyleSheet[]): void {
   const fluidRanges: IFluidRange[] = [];
 
@@ -93,6 +113,11 @@ function parseStylesheets(sheets: CSSStyleSheet[]): void {
   }
 }
 
+/**
+ * Groups CSS rules into batches based on media queries and baseline width.
+ * @param {CSSRule[]} rules - Array of CSS rules to batch.
+ * @returns {StyleBatch[]} Array of StyleBatch objects.
+ */
 function batchStylesheet(rules: CSSRule[]): StyleBatch[] {
   const state: IBatchStyleRuleState = {
     currentBatch: null,
@@ -106,12 +131,18 @@ function batchStylesheet(rules: CSSRule[]): StyleBatch[] {
   return state.batches;
 }
 
+/**
+ * Finds the baseline width (from the first media query with no rules) in the rules array.
+ * @param {CSSRule[]} rules - Array of CSS rules.
+ * @returns {number} The baseline width, or 0 if not found.
+ */
 function getBaselineWidth(rules: CSSRule[]): number {
   for (const rule of rules) {
     if (rule instanceof CSSMediaRule) {
       const mediaRule = rule;
       const minWidth = getMinWidth(mediaRule.media.mediaText);
 
+      // Only use media queries with no rules as baseline
       if (!minWidth || mediaRule.cssRules.length > 0) continue;
 
       return minWidth;
@@ -120,11 +151,22 @@ function getBaselineWidth(rules: CSSRule[]): number {
   return 0;
 }
 
+/**
+ * Extracts the min-width value from a media query string.
+ * @param {string} mediaText - The media query string.
+ * @returns {number|null} The min-width in px, or null if not found.
+ */
 function getMinWidth(mediaText: string): number | null {
+  // Regex explanation: matches (min-width: <number>px)
   const match = mediaText.match(/\(min-width:\s*(\d+)px\)/);
   return match ? Number(match[1]) : null;
 }
 
+/**
+ * Adds a CSSStyleRule to the current batch, or creates a new batch if needed.
+ * @param {IBatchStyleRuleState} state - The batching state.
+ * @param {CSSStyleRule} rule - The rule to add.
+ */
 function batchStyleRule(state: IBatchStyleRuleState, rule: CSSStyleRule): void {
   let { currentBatch, batches, baselineWidth } = state;
   if (currentBatch === null) {
@@ -139,6 +181,11 @@ function batchStyleRule(state: IBatchStyleRuleState, rule: CSSStyleRule): void {
   currentBatch.rules.push(rule);
 }
 
+/**
+ * Starts a new batch for a media query rule.
+ * @param {IBatchState} state - The batching state.
+ * @param {CSSMediaRule} rule - The media rule to batch.
+ */
 function batchMediaRule(state: IBatchState, rule: CSSMediaRule): void {
   state.currentBatch = null;
 
@@ -151,6 +198,11 @@ function batchMediaRule(state: IBatchState, rule: CSSMediaRule): void {
     });
 }
 
+/**
+ * Processes a CSSStyleRule for fluid properties and adds fluid ranges to state.
+ * @param {CSSStyleRule} rule - The style rule to process.
+ * @param {IParseStylesheetState} state - The current parse state.
+ */
 function processStyleRule(
   rule: CSSStyleRule,
   state: IParseStylesheetState
@@ -175,14 +227,30 @@ function processStyleRule(
   }
 }
 
-function getMinValue(rule: CSSStyleRule, property: string): IFluidValue | null {
+/**
+ * Gets the minimum value for a property from a CSSStyleRule.
+ * @param {CSSStyleRule} rule - The style rule.
+ * @param {string} property - The property name.
+ * @returns {IFluidValue|null} The parsed value, or null if not found.
+ */
+function getMinValue(
+  rule: CSSStyleRule,
+  property: string
+): IFluidValue | IFluidValue[] | null {
   const value = rule.style.getPropertyValue(property);
   if (!value) return null;
   return parseFluidValue(value);
 }
 
-function parseFluidValue(value: string): IFluidValue | null {
-  //TODO: Handle multiple values, decimals, and calculations like min() and max()
+/**
+ * Parses a CSS value string into an IFluidValue object or array.
+ * @param {string} value - The CSS value string (e.g., '16px').
+ * @returns {IFluidValue|null} The parsed value, or null if not matched.
+ *
+ * TODO: Handle multiple values, decimals, and calculations like min() and max().
+ */
+function parseFluidValue(value: string): IFluidValue | IFluidValue[] | null {
+  // Regex explanation: matches a number (integer) followed by a unit (e.g., px, em)
   const match = value.match(/(\d+)([a-z]+)/);
   if (!match) return null;
   return {
@@ -191,12 +259,17 @@ function parseFluidValue(value: string): IFluidValue | null {
   };
 }
 
+/**
+ * Finds the maximum value for a property in subsequent batches (media queries).
+ * @param {IGetMaxValueParams} params - Parameters for finding the max value.
+ * @returns {IFluidValue|null} The parsed value, or null if not found.
+ */
 function getMaxValue({
   index,
   batches,
   batch,
   property,
-}: IGetMaxValueParams): IFluidValue | null {
+}: IGetMaxValueParams): IFluidValue | IFluidValue[] | null {
   for (let i = index + 1; i < batches.length; i++) {
     const nextBatch = batches[i];
 
