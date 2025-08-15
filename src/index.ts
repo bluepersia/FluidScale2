@@ -94,20 +94,31 @@ function isStyleSheetsAccessible() {
 function parseStylesheets(sheets: CSSStyleSheet[]): void {
   const fluidRanges: IFluidRange[] = [];
 
+  const globalBaselineWidth = getBaselineWidth(
+    sheets.map((sheet) => [...Array.from(sheet.cssRules)]).flat()
+  );
   for (const sheet of sheets) {
-    const rules: CSSRule[] = Array.from(sheet.cssRules);
+    parseStylesheet(sheet, fluidRanges, globalBaselineWidth);
+  }
+}
 
-    const batches: StyleBatch[] = batchStylesheet(rules);
-    const state: IParseStylesheetStateBase = {
-      batches,
-      fluidRanges,
-    };
+function parseStylesheet(
+  sheet: CSSStyleSheet,
+  fluidRanges: IFluidRange[],
+  globalBaselineWidth: number | null
+): void {
+  const rules: CSSRule[] = Array.from(sheet.cssRules);
 
-    for (const [index, batch] of batches.entries()) {
-      for (const rule of batch.rules) {
-        if (rule instanceof CSSStyleRule) {
-          processStyleRule(rule, { ...state, index, batch });
-        }
+  const batches: StyleBatch[] = batchStylesheet(rules, globalBaselineWidth);
+  const state: IParseStylesheetStateBase = {
+    batches,
+    fluidRanges,
+  };
+
+  for (const [index, batch] of batches.entries()) {
+    for (const rule of batch.rules) {
+      if (rule instanceof CSSStyleRule) {
+        processStyleRule({ rule, ...state, index, batch });
       }
     }
   }
@@ -118,11 +129,14 @@ function parseStylesheets(sheets: CSSStyleSheet[]): void {
  * @param {CSSRule[]} rules - Array of CSS rules to batch.
  * @returns {StyleBatch[]} Array of StyleBatch objects.
  */
-function batchStylesheet(rules: CSSRule[]): StyleBatch[] {
+function batchStylesheet(
+  rules: CSSRule[],
+  globalBaselineWidth: number | null
+): StyleBatch[] {
   const state: IBatchStyleRuleState = {
     currentBatch: null,
     batches: [],
-    baselineWidth: getBaselineWidth(rules),
+    baselineWidth: globalBaselineWidth ?? getBaselineWidth(rules) ?? 0,
   };
   for (const rule of rules) {
     if (rule instanceof CSSStyleRule) batchStyleRule(state, rule);
@@ -136,7 +150,7 @@ function batchStylesheet(rules: CSSRule[]): StyleBatch[] {
  * @param {CSSRule[]} rules - Array of CSS rules.
  * @returns {number} The baseline width, or 0 if not found.
  */
-function getBaselineWidth(rules: CSSRule[]): number {
+function getBaselineWidth(rules: CSSRule[]): number | null {
   for (const rule of rules) {
     if (rule instanceof CSSMediaRule) {
       const mediaRule = rule;
@@ -148,7 +162,7 @@ function getBaselineWidth(rules: CSSRule[]): number {
       return minWidth;
     }
   }
-  return 0;
+  return null;
 }
 
 /**
@@ -203,10 +217,8 @@ function batchMediaRule(state: IBatchState, rule: CSSMediaRule): void {
  * @param {CSSStyleRule} rule - The style rule to process.
  * @param {IParseStylesheetState} state - The current parse state.
  */
-function processStyleRule(
-  rule: CSSStyleRule,
-  state: IParseStylesheetState
-): void {
+function processStyleRule(state: IParseStylesheetState): void {
+  const { rule } = state;
   for (const property of FLUID_PROPERTY_NAMES) {
     if (SHORTHAND_PROPERTY_NAMES.includes(property)) continue;
 

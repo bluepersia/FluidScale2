@@ -41,6 +41,8 @@ export interface IParseStylesheetState extends IParseStylesheetStateBase {
   index: number;
   /** The current batch being processed. */
   batch: StyleBatch;
+
+  rule: CSSStyleRule;
 }
 
 /**
