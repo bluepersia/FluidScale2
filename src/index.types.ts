@@ -24,8 +24,8 @@ export interface IParseStylesheetState extends IParseStylesheetStateBase {
 }
 
 export interface IFluidRange {
-  minValue: IFluidValue;
-  maxValue: IFluidValue;
+  minValue: IFluidValue | IFluidValue[];
+  maxValue: IFluidValue | IFluidValue[];
   property: string;
   selectorText: string;
 }

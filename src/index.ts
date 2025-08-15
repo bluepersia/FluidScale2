@@ -47,7 +47,28 @@ const SHORTHAND_PROPERTY_NAMES = [
 ];
 
 export default function init(): void {
+  if (!isStyleSheetsAccessible()) {
+    console.error(
+      "Style sheets are not accessible. Please use a secure origin, or load fluid values from JSON."
+    );
+    return;
+  }
   parseStylesheets(Array.from(document.styleSheets));
+}
+
+function isStyleSheetsAccessible() {
+  try {
+    // Attempt to read document.styleSheets
+    const sheets = document.styleSheets;
+    // Try to access a property to ensure no security error is thrown
+    if (sheets.length >= 0) {
+      return true;
+    }
+  } catch (e) {
+    // Accessing styleSheets may throw a SecurityError for cross-origin styles
+    return false;
+  }
+  return false;
 }
 
 function parseStylesheets(sheets: CSSStyleSheet[]): void {
@@ -64,8 +85,8 @@ function parseStylesheets(sheets: CSSStyleSheet[]): void {
 
     for (const [index, batch] of batches.entries()) {
       for (const rule of batch.rules) {
-        if (rule.type === CSSRule.STYLE_RULE) {
-          processStyleRule(rule as CSSStyleRule, { ...state, index, batch });
+        if (rule instanceof CSSStyleRule) {
+          processStyleRule(rule, { ...state, index, batch });
         }
       }
     }
@@ -79,32 +100,24 @@ function batchStylesheet(rules: CSSRule[]): StyleBatch[] {
     baselineWidth: getBaselineWidth(rules),
   };
   for (const rule of rules) {
-    if (rule.type === CSSRule.STYLE_RULE)
-      batchStyleRule(state, rule as CSSStyleRule);
-    else if (rule.type === CSSRule.MEDIA_RULE)
-      batchMediaRule(state, rule as CSSMediaRule);
+    if (rule instanceof CSSStyleRule) batchStyleRule(state, rule);
+    else if (rule instanceof CSSMediaRule) batchMediaRule(state, rule);
   }
   return state.batches;
 }
 
 function getBaselineWidth(rules: CSSRule[]): number {
   for (const rule of rules) {
-    if (rule.type === CSSRule.MEDIA_RULE) {
-      const mediaRule = rule as CSSMediaRule;
-      if (
-        hasMinWidth(mediaRule.media.mediaText) ||
-        mediaRule.cssRules.length > 0
-      )
-        continue;
+    if (rule instanceof CSSMediaRule) {
+      const mediaRule = rule;
       const minWidth = getMinWidth(mediaRule.media.mediaText);
-      if (minWidth) return minWidth;
+
+      if (!minWidth || mediaRule.cssRules.length > 0) continue;
+
+      return minWidth;
     }
   }
   return 0;
-}
-
-function hasMinWidth(mediaText: string): boolean {
-  return mediaText.includes("(min-width");
 }
 
 function getMinWidth(mediaText: string): number | null {
@@ -127,14 +140,14 @@ function batchStyleRule(state: IBatchStyleRuleState, rule: CSSStyleRule): void {
 }
 
 function batchMediaRule(state: IBatchState, rule: CSSMediaRule): void {
-  const mediaRule = rule as CSSMediaRule;
   state.currentBatch = null;
 
-  if (hasMinWidth(mediaRule.media.mediaText))
+  const minWidth = getMinWidth(rule.media.mediaText);
+  if (minWidth)
     state.batches.push({
-      width: getMinWidth(mediaRule.media.mediaText) ?? 0,
+      width: minWidth,
       isMediaQuery: true,
-      rules: Array.from(mediaRule.cssRules),
+      rules: Array.from(rule.cssRules),
     });
 }
 
@@ -142,7 +155,6 @@ function processStyleRule(
   rule: CSSStyleRule,
   state: IParseStylesheetState
 ): void {
-  const styleRule = rule as CSSStyleRule;
   for (const property of FLUID_PROPERTY_NAMES) {
     if (SHORTHAND_PROPERTY_NAMES.includes(property)) continue;
 
@@ -152,7 +164,7 @@ function processStyleRule(
     const maxValue = getMaxValue({ ...state, property });
     if (!maxValue) continue;
 
-    const selectorText = styleRule.selectorText;
+    const selectorText = rule.selectorText;
 
     state.fluidRanges.push({
       minValue,
@@ -170,6 +182,7 @@ function getMinValue(rule: CSSStyleRule, property: string): IFluidValue | null {
 }
 
 function parseFluidValue(value: string): IFluidValue | null {
+  //TODO: Handle multiple values, decimals, and calculations like min() and max()
   const match = value.match(/(\d+)([a-z]+)/);
   if (!match) return null;
   return {
@@ -191,8 +204,8 @@ function getMaxValue({
 
     if (nextBatch.isMediaQuery && nextBatch.width > batch.width) {
       for (const nextRule of nextBatch.rules) {
-        if (nextRule.type === CSSRule.STYLE_RULE) {
-          const nextStyleRule = nextRule as CSSStyleRule;
+        if (nextRule instanceof CSSStyleRule) {
+          const nextStyleRule = nextRule;
           const nextValue = nextStyleRule.style.getPropertyValue(property);
           if (nextValue) return parseFluidValue(nextValue);
         }
