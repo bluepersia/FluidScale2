@@ -76,7 +76,7 @@ function getMinValue(
  * TODO: Handle multiple values, decimals, and calculations like min() and max().
  */
 function parseFluidValue(value: string): IFluidValue | IFluidValue[] | null {
-  // Regex explanation: matches a number (integer) followed by a unit (e.g., px, em)
+  // Regex explanation: matches a number (integer) followed by a lettered unit (e.g., px, em)
   const match = value.match(/(\d+)([a-z]+)/);
   if (!match) return null;
   return {
