@@ -1,16 +1,7 @@
 import { FluidRangesByAnchor } from "./index.types";
 import { parseDocument } from "./parse/stylesheet";
-import { IFluidProperty, FluidPropertyState } from "./engine/engine.types";
+import { FluidPropertyState } from "./engine/engine.types";
 import { FluidProperty } from "./engine/fluidProperty";
-
-declare global {
-  interface HTMLElement {
-    fluidProperties?: IFluidProperty[];
-    states?: FluidPropertyState[];
-    statesByProperty?: { [property: string]: FluidPropertyState };
-    isHidden?: boolean;
-  }
-}
 
 let fluidRangesByAnchor: FluidRangesByAnchor = {};
 export let breakpoints: number[] = [];
@@ -124,7 +115,10 @@ function addElements(els: HTMLElement[]): void {
   }
 }
 
+let updateTime = performance.now();
 function update(): void {
+  updateTime = performance.now();
+
   for (const el of inactiveElements) {
     updateElement(el);
   }
@@ -139,12 +133,16 @@ function update(): void {
   requestAnimationFrame(update);
 }
 
-function updateElement(el: HTMLElement): void {
+export function updateElement(el: HTMLElement): void {
   if (!el.isConnected) {
     activeElements.delete(el);
-    inactiveElements.add(el);
+    inactiveElements.delete(el);
+    intersectionObserver.unobserve(el);
     return;
   }
+
+  if (el.updateTime && el.updateTime === updateTime) return;
+  el.updateTime = updateTime;
 
   if (el.fluidProperties) {
     for (const fluidProperty of el.fluidProperties) {
@@ -171,6 +169,7 @@ function applyState(el: HTMLElement, state: FluidPropertyState): void {
     state.appliedWidth = window.innerWidth;
   }
   state.value = "";
+  state.order = -1;
 }
 function processAnchorFluidRanges(el: HTMLElement, anchor: string) {
   const fluidRangesBySelector = fluidRangesByAnchor[anchor];

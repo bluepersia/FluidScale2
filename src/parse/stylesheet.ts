@@ -20,12 +20,7 @@ export function parseDocument(document: Document): ParsedDocument | null {
   const rulesPerSheet: CSSRule[][] = sheets.map((sheet) => [
     ...Array.from(sheet.cssRules),
   ]);
-  const state: IParseStylesheetState = {
-    breakpoints: getBreakpoints(rulesPerSheet),
-    globalBaselineWidth: getBaselineWidth(rulesPerSheet.flat()) ?? 0,
-    fluidRangesByAnchor: {},
-    order: 0,
-  };
+  const state: IParseStylesheetState = makeParseStylesheetState(rulesPerSheet);
 
   for (const sheet of sheets) {
     parseStylesheet(sheet, state);
@@ -44,6 +39,17 @@ function isStyleSheetsAccessible(document: Document) {
     return false;
   }
   return false;
+}
+
+function makeParseStylesheetState(
+  rulesPerSheet: CSSRule[][]
+): IParseStylesheetState {
+  return {
+    breakpoints: getBreakpoints(rulesPerSheet),
+    globalBaselineWidth: getBaselineWidth(rulesPerSheet.flat()) ?? 0,
+    fluidRangesByAnchor: {},
+    order: 0,
+  };
 }
 
 function parseStylesheet(

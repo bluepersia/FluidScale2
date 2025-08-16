@@ -9,6 +9,7 @@
   "author": "Marco Enrique Zimmermann",
   "license": "ISC",
   "devDependencies": {
+    "eslint": "^9.33.0",
     "typescript": "^5.9.2"
   }
 }

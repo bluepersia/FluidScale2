@@ -1,11 +1,11 @@
 import { IComputationState } from "../engine.types";
 import { getComputedStyle } from "../../index";
 import { getBoundingClientRect } from "../../index";
-import { parsePxString } from "./computation";
+import { IComputeFluidValueState } from "./computation.types";
 
 export function calcEmValue(
   value: number,
-  computationState: IComputationState
+  computationState: IComputeFluidValueState
 ): number {
   const { el, property } = computationState;
   if (property === "font-size") {
@@ -17,7 +17,7 @@ export function calcEmValue(
 
 function emElementLoop(
   value: number,
-  state: IComputationState,
+  state: IComputeFluidValueState,
   el: HTMLElement | null
 ): number {
   let result;
@@ -32,23 +32,23 @@ function emElementLoop(
 
   return (
     value *
-    parsePxString(getComputedStyle(window.document.documentElement).fontSize)
+    parseFloat(getComputedStyle(window.document.documentElement).fontSize)
   );
 }
 
 function emProcessEl(
   value: number,
-  state: IComputationState,
+  state: IComputeFluidValueState,
   el: HTMLElement
 ): number | undefined {
-  const { minBreakpoint, maxBreakpoint } = state;
+  const { minBreakpoint, maxBreakpoint, minOrMax } = state;
   const statesByProperty = el.statesByProperty;
   if (statesByProperty) {
     let fontSizeState = statesByProperty["font-size"];
     if (fontSizeState && fontSizeState.fluidProperty) {
       const fontSizeFluidProperty = fontSizeState.fluidProperty;
       let fontSizeValue = fontSizeFluidProperty.computeValueForWidth(
-        minBreakpoint,
+        minOrMax === "min" ? minBreakpoint : maxBreakpoint,
         {
           minBreakpoint: minBreakpoint,
           maxBreakpoint: maxBreakpoint,
@@ -107,8 +107,8 @@ function calcHorizontalPercentValue(
   const parentRect = getBoundingClientRect(parent);
   const parentStyle = getComputedStyle(parent);
   const [paddingLeft, paddingRight] = [
-    parsePxString(parentStyle.paddingLeft),
-    parsePxString(parentStyle.paddingRight),
+    parseFloat(parentStyle.paddingLeft),
+    parseFloat(parentStyle.paddingRight),
   ];
   const parentWidth = parentRect.width - paddingLeft - paddingRight;
   return (value / 100) * parentWidth;
@@ -118,8 +118,8 @@ function calcVerticalPercentValue(value: number, parent: HTMLElement): number {
   const parentRect = getBoundingClientRect(parent);
   const parentStyle = getComputedStyle(parent);
   const [paddingTop, paddingBottom] = [
-    parsePxString(parentStyle.paddingTop),
-    parsePxString(parentStyle.paddingBottom),
+    parseFloat(parentStyle.paddingTop),
+    parseFloat(parentStyle.paddingBottom),
   ];
   const parentHeight = parentRect.height - paddingTop - paddingBottom;
   return (value / 100) * parentHeight;
@@ -127,12 +127,12 @@ function calcVerticalPercentValue(value: number, parent: HTMLElement): number {
 
 function calcFontSizePercentValue(value: number, parent: HTMLElement): number {
   const parentStyle = getComputedStyle(parent);
-  const parentFontSize = parsePxString(parentStyle.fontSize);
+  const parentFontSize = parseFloat(parentStyle.fontSize);
   return (value / 100) * parentFontSize;
 }
 
 function calcLineHeightPercentValue(value: number, el: HTMLElement): number {
   const elStyle = getComputedStyle(el);
-  const elFontSize = parsePxString(elStyle.fontSize);
+  const elFontSize = parseFloat(elStyle.fontSize);
   return (value / 100) * elFontSize;
 }

@@ -1,10 +1,10 @@
 import {
   IProcessStyleRuleState,
-  IGetMaxValueParams,
   IProcessSelectorState,
   IGetFluidRangesState,
 } from "./parse.types";
-import { IFluidRange, IFluidValue } from "../index.types";
+import { IFluidRange } from "../index.types";
+import { getMinMaxValue } from "./values";
 
 const FLUID_PROPERTY_NAMES = [
   "font-size",
@@ -56,7 +56,7 @@ export function processStyleRule(state: IProcessStyleRuleState): void {
   }
 }
 
-function splitSelector(selector: string): string[] {
+export function splitSelector(selector: string): string[] {
   return selector.split(",").map((selector) => selector.trim());
 }
 
@@ -76,57 +76,7 @@ function processSelector(state: IProcessSelectorState): void {
   });
 }
 
-function getMinMaxValue(
-  state: IProcessSelectorState
-):
-  | [
-      IFluidValue | IFluidValue[],
-      IFluidValue | IFluidValue[],
-      number,
-      IFluidRange[]
-    ]
-  | undefined {
-  const { rule, property } = state;
-
-  const minValue = getMinValue(rule, property);
-  if (!minValue) return;
-
-  const fluidRanges = getFluidRanges(state);
-
-  let maxValueResult = getMaxValue({
-    ...state,
-    isEligibleForSingleValue:
-      fluidRanges.length === 0 && property === "font-size",
-    minValue,
-  });
-  if (!maxValueResult) return;
-
-  return [minValue, ...maxValueResult, fluidRanges];
-}
-
-function getMinValue(
-  rule: CSSStyleRule,
-  property: string
-): IFluidValue | IFluidValue[] | null {
-  const value = rule.style.getPropertyValue(property);
-  if (!value) return null;
-  return parseFluidValue(value);
-}
-
-/**
- * TODO: Handle multiple values, decimals, and calculations like min() and max().
- */
-function parseFluidValue(value: string): IFluidValue | IFluidValue[] | null {
-  // Regex explanation: matches a number (integer) followed by a lettered unit (e.g., px, em)
-  const match = value.match(/(\d+)([a-z]+)/);
-  if (!match) return null;
-  return {
-    value: Number(match[1]),
-    unit: match[2] ?? "px",
-  };
-}
-
-function getFluidRanges(state: IGetFluidRangesState): IFluidRange[] {
+export function getFluidRanges(state: IGetFluidRangesState): IFluidRange[] {
   const { selector, property, order, fluidRangesByAnchor } = state;
   const selectorSegments = selector.split(" ");
   const anchor = selectorSegments[selectorSegments.length - 1];
@@ -139,43 +89,4 @@ function getFluidRanges(state: IGetFluidRangesState): IFluidRange[] {
     };
   }
   return fluidRangesBySelector[selector][1];
-}
-
-function getMaxValue(
-  params: IGetMaxValueParams
-): [IFluidValue | IFluidValue[], number] | null {
-  const {
-    index,
-    batches,
-    batch,
-    property,
-    selector,
-    isEligibleForSingleValue,
-    minValue,
-    batch: { width },
-  } = params;
-
-  for (let i = index + 1; i < batches.length; i++) {
-    const nextBatch = batches[i];
-
-    if (!nextBatch.isMediaQuery) break;
-
-    if (nextBatch.isMediaQuery && nextBatch.width > batch.width) {
-      for (const nextRule of nextBatch.rules) {
-        if (nextRule instanceof CSSStyleRule) {
-          if (splitSelector(nextRule.selectorText).includes(selector)) {
-            const nextValue = nextRule.style.getPropertyValue(property);
-            if (nextValue) {
-              const parsedValue = parseFluidValue(nextValue);
-              if (parsedValue) return [parsedValue, nextBatch.width];
-            }
-          }
-        }
-      }
-    }
-  }
-
-  if (isEligibleForSingleValue) return [minValue, width];
-
-  return null;
 }

@@ -27,6 +27,10 @@ export class FluidProperty implements IFluidProperty {
       ? "flex"
       : null;
 
+    this.state = this.initState();
+  }
+
+  initState(): FluidPropertyState {
     if (!this.el.statesByProperty) this.el.statesByProperty = {};
 
     if (!this.el.statesByProperty[this.metaData.property]) {
@@ -40,7 +44,7 @@ export class FluidProperty implements IFluidProperty {
       };
     }
 
-    this.state = this.el.statesByProperty[this.metaData.property];
+    return this.el.statesByProperty[this.metaData.property];
   }
 
   update(): void {

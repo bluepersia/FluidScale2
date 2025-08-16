@@ -1,3 +1,15 @@
+import { FluidPropertyState, IFluidProperty } from "./engine/engine.types";
+
+declare global {
+  interface HTMLElement {
+    fluidProperties?: IFluidProperty[];
+    states?: FluidPropertyState[];
+    statesByProperty?: { [property: string]: FluidPropertyState };
+    isHidden?: boolean;
+    updateTime?: number;
+  }
+}
+
 export interface IFluidRange {
   minValue: IFluidValue | IFluidValue[];
   maxValue: IFluidValue | IFluidValue[];
@@ -10,8 +22,8 @@ export type FluidRangeMetaData = {
 };
 
 export interface IFluidValue {
-  value: number | Calc;
-  unit: string | CalcUnits;
+  value: number | Calc | string;
+  unit: string | CalcUnits | string;
 }
 
 export type ParsedDocument = {
@@ -28,7 +40,7 @@ export type FluidRangesBySelector = {
 
 export type Calc = {
   type: "calc" | "min" | "max" | "clamp" | "minmax";
-  values: (number | Calc)[];
+  values: (number | Calc | string)[];
 };
 export type CalcUnits = {
   units: (string | CalcUnits)[];

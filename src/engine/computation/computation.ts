@@ -62,20 +62,44 @@ function computeFluidValue(
   state: IComputationState,
   minOrMax: "min" | "max"
 ): number | number[] {
-  if (Array.isArray(fluidValue)) {
-    return fluidValue.map((value) => {
-      return computeValue(value.value, value.unit, { ...state, minOrMax });
-    });
-  } else {
+  const { el, property } = state;
+  if (!Array.isArray(fluidValue)) {
+    if (
+      (property === "grid-template-columns" ||
+        property === "grid-template-rows") &&
+      typeof fluidValue.value === "string"
+    )
+      return computeGridTemplateValue(el, property, fluidValue.value);
+
     return computeValue(fluidValue.value, fluidValue.unit, {
       ...state,
       minOrMax,
     });
+  } else {
+    return fluidValue.map((value) => {
+      return computeValue(value.value, value.unit, { ...state, minOrMax });
+    });
   }
 }
 
+function computeGridTemplateValue(
+  el: HTMLElement,
+  property: string,
+  value: string
+): number[] {
+  el.style.setProperty(property, value);
+
+  const computedStyle = window.getComputedStyle(el);
+  const gridTemplate = computedStyle.getPropertyValue(property);
+  const gridTemplateArray = gridTemplate.split(" ");
+  const gridTemplateValues = gridTemplateArray.map((value) => {
+    return parseFloat(value);
+  });
+  return gridTemplateValues;
+}
+
 function computeValue(
-  value: number | Calc,
+  value: number | Calc | string,
   unit: string | CalcUnits,
   computationState: IComputeFluidValueState
 ): number {
@@ -83,30 +107,31 @@ function computeValue(
     return convertToPixels(value, unit, computationState);
   }
 
+  if (typeof value === "string") {
+    const { el, property } = computationState;
+    return measureKeywordValue(el, property, value);
+  }
   if (typeof value === "object" && typeof unit === "object") {
     return computeCalc(value, unit, computationState);
   }
 
-  return 0;
+  throw new Error(`Unknown value or unit: ${value} ${unit}`);
 }
 
 function convertToPixels(
   value: number,
   unit: string,
-  computationState: IComputationState
+  computationState: IComputeFluidValueState
 ): number {
   switch (unit) {
     case "px":
       return value;
-    case "em": {
+    case "em":
       return calcEmValue(value, computationState);
-    }
     case "rem":
       return (
         value *
-        parsePxString(
-          getComputedStyle(window.document.documentElement).fontSize
-        )
+        parseFloat(getComputedStyle(window.document.documentElement).fontSize)
       );
     case "%":
       return calcPercentValue(value, computationState);
@@ -115,10 +140,23 @@ function convertToPixels(
   return value;
 }
 
-export function parsePxString(value: string): number {
-  const match = value.match(/(\d+)([a-z]+)/);
-  if (!match) return 0;
-  return Number(match[1]);
+function measureKeywordValue(
+  element: HTMLElement,
+  property: string,
+  keyword: string
+): number {
+  element.style.setProperty(property, keyword);
+
+  // 6. Measure
+  let value: number;
+  if (property === "width" || property === "height") {
+    value = element.getBoundingClientRect()[property];
+  } else {
+    const px = window.getComputedStyle(element).getPropertyValue(property);
+    value = parseFloat(px) || 0;
+  }
+
+  return value;
 }
 
 function computeCalc(
@@ -126,6 +164,8 @@ function computeCalc(
   unit: CalcUnits,
   state: IComputeFluidValueState
 ): number {
+  if (calc.type === "calc") return evaluateCalc(calc.values, unit.units, state);
+
   const values = calc.values.map((value, index) =>
     computeValue(value, unit.units[index], state)
   );
@@ -140,4 +180,28 @@ function computeCalc(
       return Math.min(Math.max(values[0], values[1]), values[2]);
   }
   throw new Error(`Unknown calc type: ${calc.type}`);
+}
+
+function isArithmetic(value: string): boolean {
+  return value === "+" || value === "-" || value === "*" || value === "/";
+}
+
+function evaluateCalc(
+  values: (string | number | Calc)[],
+  units: (string | CalcUnits)[],
+  state: IComputeFluidValueState
+): number {
+  const expression = values
+    .map((value, index) => {
+      if (typeof value === "string" && isArithmetic(value)) return value;
+
+      return computeValue(value, units[index], state);
+    })
+    .join("");
+
+  if (!/^[\d+\-*/().\s]+$/.test(expression)) {
+    throw new Error("Unsafe expression");
+  }
+
+  return new Function(`return (${expression})`)();
 }
