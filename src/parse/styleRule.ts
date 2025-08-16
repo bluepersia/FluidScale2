@@ -1,8 +1,10 @@
 import {
   IProcessStyleRuleState,
-  IGetMaxValueParams,
-  IFluidValue,
+  IProcessSelectorState,
+  IGetFluidRangesState,
 } from "./parse.types";
+import { IFluidRange } from "../index.types";
+import { getMinMaxValue } from "./values";
 
 const FLUID_PROPERTY_NAMES = [
   "font-size",
@@ -46,65 +48,45 @@ export function processStyleRule(state: IProcessStyleRuleState): void {
   for (const property of FLUID_PROPERTY_NAMES) {
     if (SHORTHAND_PROPERTY_NAMES.includes(property)) continue;
 
-    const minValue = getMinValue(rule, property);
-    if (!minValue) continue;
+    const selectors = splitSelector(rule.selectorText);
 
-    const maxValue = getMaxValue({ ...state, property });
-    if (!maxValue) continue;
-
-    const selectorText = rule.selectorText;
-
-    state.fluidRanges.push({
-      minValue,
-      maxValue,
-      property,
-      selectorText,
-    });
-  }
-}
-
-function getMinValue(
-  rule: CSSStyleRule,
-  property: string
-): IFluidValue | IFluidValue[] | null {
-  const value = rule.style.getPropertyValue(property);
-  if (!value) return null;
-  return parseFluidValue(value);
-}
-
-/**
- * TODO: Handle multiple values, decimals, and calculations like min() and max().
- */
-function parseFluidValue(value: string): IFluidValue | IFluidValue[] | null {
-  // Regex explanation: matches a number (integer) followed by a lettered unit (e.g., px, em)
-  const match = value.match(/(\d+)([a-z]+)/);
-  if (!match) return null;
-  return {
-    value: Number(match[1]),
-    unit: match[2] ?? "px",
-  };
-}
-
-function getMaxValue({
-  index,
-  batches,
-  batch,
-  property,
-}: IGetMaxValueParams): IFluidValue | IFluidValue[] | null {
-  for (let i = index + 1; i < batches.length; i++) {
-    const nextBatch = batches[i];
-
-    if (!nextBatch.isMediaQuery) break;
-
-    if (nextBatch.isMediaQuery && nextBatch.width > batch.width) {
-      for (const nextRule of nextBatch.rules) {
-        if (nextRule instanceof CSSStyleRule) {
-          const nextStyleRule = nextRule;
-          const nextValue = nextStyleRule.style.getPropertyValue(property);
-          if (nextValue) return parseFluidValue(nextValue);
-        }
-      }
+    for (const selector of selectors) {
+      processSelector({ ...state, selector, property });
     }
   }
-  return null;
+}
+
+export function splitSelector(selector: string): string[] {
+  return selector.split(",").map((selector) => selector.trim());
+}
+
+function processSelector(state: IProcessSelectorState): void {
+  const minMaxValueResult = getMinMaxValue(state);
+
+  if (!minMaxValueResult) return;
+
+  const [minValue, maxValue, maxValueBatchWidth, fluidRanges] =
+    minMaxValueResult;
+
+  fluidRanges.push({
+    minValue,
+    maxValue,
+    breakpointIndex: state.breakpoints.indexOf(state.batch.width),
+    nextBreakpointIndex: state.breakpoints.indexOf(maxValueBatchWidth),
+  });
+}
+
+export function getFluidRanges(state: IGetFluidRangesState): IFluidRange[] {
+  const { selector, property, order, fluidRangesByAnchor } = state;
+  const selectorSegments = selector.split(" ");
+  const anchor = selectorSegments[selectorSegments.length - 1];
+
+  let fluidRangesBySelector = fluidRangesByAnchor[anchor];
+
+  if (!fluidRangesBySelector) {
+    state.fluidRangesByAnchor[anchor] = fluidRangesBySelector = {
+      [selector]: [{ property, order }, []],
+    };
+  }
+  return fluidRangesBySelector[selector][1];
 }

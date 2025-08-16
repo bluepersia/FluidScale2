@@ -1,8 +1,17 @@
+import { FluidRangesByAnchor, IFluidValue } from "../index.types";
+
 export type StyleBatch = {
   width: number;
   isMediaQuery: boolean;
   rules: CSSRule[];
 };
+
+export interface IParseStylesheetState {
+  breakpoints: number[];
+  globalBaselineWidth: number;
+  fluidRangesByAnchor: FluidRangesByAnchor;
+  order: number;
+}
 
 export interface IBatchState {
   currentBatch: StyleBatch | null;
@@ -15,25 +24,28 @@ export interface IBatchStyleRuleState extends IBatchState {
 
 export interface IProcessStyleRuleStateBase {
   batches: StyleBatch[];
-  fluidRanges: IFluidRange[];
+  fluidRangesByAnchor: FluidRangesByAnchor;
+  breakpoints: number[];
 }
 
 export interface IProcessStyleRuleState extends IProcessStyleRuleStateBase {
   index: number;
   batch: StyleBatch;
   rule: CSSStyleRule;
+  order: number;
 }
 
-export interface IFluidRange {
-  minValue: IFluidValue | IFluidValue[];
-  maxValue: IFluidValue | IFluidValue[];
+export interface IProcessSelectorState extends IProcessStyleRuleState {
+  selector: string;
   property: string;
-  selectorText: string;
+  rule: CSSStyleRule;
 }
 
-export interface IFluidValue {
-  value: number;
-  unit: string;
+export interface IGetFluidRangesState {
+  selector: string;
+  property: string;
+  fluidRangesByAnchor: FluidRangesByAnchor;
+  order: number;
 }
 
 export interface IGetMaxValueParams {
@@ -41,4 +53,8 @@ export interface IGetMaxValueParams {
   batches: StyleBatch[];
   batch: StyleBatch;
   property: string;
+  selector: string;
+  fluidRangesByAnchor: FluidRangesByAnchor;
+  isEligibleForSingleValue: boolean;
+  minValue: IFluidValue | IFluidValue[];
 }
