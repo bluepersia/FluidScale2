@@ -3,26 +3,35 @@ import {
   IBatchState,
   IBatchStyleRuleState,
   IProcessStyleRuleState,
-  IFluidRange,
+  IParseStylesheetState,
 } from "./parse.types";
+import { ParsedDocument } from "../index.types";
 import { processStyleRule } from "./styleRule";
 
-export function parseDocument(document: Document): void {
+export function parseDocument(document: Document): ParsedDocument | null {
   if (!isStyleSheetsAccessible(document)) {
     console.error(
       "Style sheets are not accessible. Please use a secure origin, or load fluid values from JSON."
     );
-    return;
+    return null;
   }
   const sheets = Array.from(document.styleSheets);
-  const fluidRanges: IFluidRange[] = [];
 
-  const globalBaselineWidth = getBaselineWidth(
-    sheets.map((sheet) => [...Array.from(sheet.cssRules)]).flat()
-  );
+  const rulesPerSheet: CSSRule[][] = sheets.map((sheet) => [
+    ...Array.from(sheet.cssRules),
+  ]);
+  const state: IParseStylesheetState = {
+    breakpoints: getBreakpoints(rulesPerSheet),
+    globalBaselineWidth: getBaselineWidth(rulesPerSheet.flat()) ?? 0,
+    fluidRangesByAnchor: {},
+    order: 0,
+  };
+
   for (const sheet of sheets) {
-    parseStylesheet(sheet, fluidRanges, globalBaselineWidth);
+    parseStylesheet(sheet, state);
   }
+
+  return state;
 }
 
 function isStyleSheetsAccessible(document: Document) {
@@ -39,37 +48,53 @@ function isStyleSheetsAccessible(document: Document) {
 
 function parseStylesheet(
   sheet: CSSStyleSheet,
-  fluidRanges: IFluidRange[],
-  globalBaselineWidth: number | null
+  state: IParseStylesheetState
 ): void {
+  let { globalBaselineWidth, order } = state;
+
   const rules: CSSRule[] = Array.from(sheet.cssRules);
 
   const batches: StyleBatch[] = batchStylesheet(rules, globalBaselineWidth);
-
   for (const [index, batch] of batches.entries()) {
     for (const rule of batch.rules) {
       if (rule instanceof CSSStyleRule) {
-        const state: IProcessStyleRuleState = {
+        const styleRuleState: IProcessStyleRuleState = {
+          ...state,
           batches,
-          fluidRanges,
           index,
           batch,
           rule,
+          order: order++,
         };
-        processStyleRule(state);
+        processStyleRule(styleRuleState);
       }
     }
   }
 }
 
+function getBreakpoints(rulesPerSheet: CSSRule[][]): number[] {
+  const breakpoints = [];
+  for (const rules of rulesPerSheet) {
+    for (const rule of rules) {
+      if (rule instanceof CSSMediaRule) {
+        const minWidth = getMinWidth(rule.media.mediaText);
+        if (minWidth) {
+          breakpoints.push(minWidth);
+        }
+      }
+    }
+  }
+  breakpoints.sort((a, b) => a - b);
+  return breakpoints;
+}
 function batchStylesheet(
   rules: CSSRule[],
-  globalBaselineWidth: number | null
+  globalBaselineWidth: number
 ): StyleBatch[] {
   const state: IBatchStyleRuleState = {
     currentBatch: null,
     batches: [],
-    baselineWidth: getBaselineWidth(rules) ?? globalBaselineWidth ?? 0,
+    baselineWidth: getBaselineWidth(rules) ?? globalBaselineWidth,
   };
   for (const rule of rules) {
     if (rule instanceof CSSStyleRule) batchStyleRule(state, rule);
