@@ -1,18 +1,18 @@
-import { IFluidRange } from "../index.types";
+import { IFluidBreakpointRange } from "../index.types";
 import { FluidRangeMetaData } from "../index.types";
-import { breakpoints } from "../index";
 import {
   IFluidProperty,
   FluidPropertyState,
   FluidPropertyConfig,
-  IComputationState,
-  IComputationStateBase,
+  ComputationParamsBase,
 } from "./engine.types";
 import { computeValueForRange } from "./computation/computation";
+import { getState } from "./instance/state";
+import { windowWidthIsSameSinceLastElementUpdate } from "./instance/update";
 
 export class FluidProperty implements IFluidProperty {
   el: HTMLElement;
-  fluidBreakpoints: (IFluidRange | null)[];
+  fluidBreakpoints: (IFluidBreakpointRange | null)[];
   metaData: FluidRangeMetaData;
   specialType: "grid" | "flex" | null;
   state: FluidPropertyState;
@@ -37,9 +37,7 @@ export class FluidProperty implements IFluidProperty {
       this.el.statesByProperty[this.metaData.property] = {
         property: this.metaData.property,
         value: "",
-        appliedValue: "",
-        appliedWidth: -1,
-        order: -1,
+        orderID: -1,
         fluidProperty: null,
       };
     }
@@ -47,58 +45,89 @@ export class FluidProperty implements IFluidProperty {
     return this.el.statesByProperty[this.metaData.property];
   }
 
-  update(): void {
-    if (this.el.isHidden) return;
+  update(breakpoints: number[]): void {
+    if (this.metaData.orderID < this.state.orderID) return; //Apply only the highest order fluid property
 
-    if (this.metaData.order < this.state.order) return;
+    //If this is a dynamic selector, we only want to apply it if it's actually active on the element
+    if (
+      this.metaData.dynamicSelector &&
+      !this.el.matches(this.metaData.dynamicSelector)
+    )
+      return;
 
-    const value = this.getValueAsString();
+    if (this.repeatLastComputedValue()) return;
 
-    if (!value) return;
+    this.el.calcedSizePercentEl = undefined;
+    const value = this.getValueAsString(breakpoints);
 
     this.state.value = value;
     this.state.fluidProperty = this;
+    this.state.orderID = this.metaData.orderID;
+    this.state.calcedSizePercentEl = this.el.calcedSizePercentEl;
   }
 
-  getValueAsString(): string {
-    const valueResult = this.computeValueForWidth(window.innerWidth, undefined);
-    if (valueResult === null) return "";
+  /** Performance optimization: If the width didn't change, we re-apply the last computed value, unless a higher order fluid property has been activated*/
+  repeatLastComputedValue(): boolean {
+    const { appliedState } = this.state;
+
+    if (!appliedState) return false;
+
+    const {
+      value: appliedValue,
+      orderID: appliedOrderID,
+      fluidProperty: appliedFluidProperty,
+      calcedSizePercentEl: appliedCalcedSizePercentEl,
+    } = appliedState;
+
+    if (
+      windowWidthIsSameSinceLastElementUpdate(
+        this.el,
+        getState().stableWindowWidth
+      )
+    ) {
+      if (this === appliedFluidProperty) {
+        // If the styles on which % calculation is based have changed, we want to re-compute the value
+        if (this.el.inlineStylesChanged) return false;
+
+        //If the applied value was calced from target size, we need to re-compute if the target has been resized
+        if (appliedCalcedSizePercentEl?.isResized) return false;
+
+        //Re-apply the last-applied value
+        this.state.value = appliedValue;
+        this.state.fluidProperty = this;
+        return true;
+      }
+      if (this.metaData.orderID > appliedOrderID) return false; //If the order is higher than the last-applied, we still want to overwrite, even if the width is same
+      return true; //If the order is lower, we cancel writing state, leaving it up to the last-applied to re-apply
+    }
+
+    return false; //If the width changed, we want to re-compute the value
+  }
+
+  getValueAsString(breakpoints: number[]): string {
+    const computationParams = this.makeComputationParams(breakpoints);
+    if (!computationParams) return "";
+
+    const valueResult = computeValueForRange({
+      ...computationParams,
+      el: this.el,
+      property: this.metaData.property,
+    });
 
     if (Array.isArray(valueResult))
       return valueResult.map((value) => `${value}px`).join(" ");
     else return `${valueResult}px`;
   }
 
-  computeValueForWidth(
-    width: number,
-    mergeMinMaxState: Partial<IComputationState> | undefined
-  ): number | number[] | null {
-    const state = this.getComputationState(width);
-    if (!state) return null;
-
-    if (mergeMinMaxState) {
-      if (mergeMinMaxState.minBreakpoint !== undefined)
-        state.minBreakpoint = mergeMinMaxState.minBreakpoint;
-      if (mergeMinMaxState.maxBreakpoint !== undefined)
-        state.maxBreakpoint = mergeMinMaxState.maxBreakpoint;
-    }
-
-    return computeValueForRange({
-      ...state,
-      el: this.el,
-      property: this.metaData.property,
-    });
-  }
-
-  getComputationState(width: number): IComputationStateBase | null {
+  makeComputationParams(breakpoints: number[]): ComputationParamsBase | null {
     for (let i = this.fluidBreakpoints.length - 1; i >= 0; i--) {
       const fluidRange = this.fluidBreakpoints[i];
-      if (fluidRange && width >= fluidRange.breakpointIndex) {
-        const minBreakpoint = breakpoints[fluidRange.breakpointIndex];
-        const maxBreakpoint = breakpoints[fluidRange.nextBreakpointIndex];
+      if (fluidRange && window.innerWidth >= fluidRange.minIndex) {
+        const minBreakpoint = breakpoints[fluidRange.minIndex];
+        const maxBreakpoint = breakpoints[fluidRange.maxIndex];
         const progress =
           (window.innerWidth - minBreakpoint) / (maxBreakpoint - minBreakpoint);
-        return { minBreakpoint, maxBreakpoint, progress, fluidRange };
+        return { progress, fluidRange };
       }
     }
 

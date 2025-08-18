@@ -1,4 +1,9 @@
-import { FluidRangesByAnchor, IFluidValue } from "../index.types";
+import {
+  DeepReadonly,
+  DeepReadonlyExcept,
+  Expand,
+  FluidRangesByAnchor,
+} from "../index.types";
 
 export type StyleBatch = {
   width: number;
@@ -6,55 +11,63 @@ export type StyleBatch = {
   rules: CSSRule[];
 };
 
-export interface IParseStylesheetState {
-  breakpoints: number[];
-  globalBaselineWidth: number;
-  fluidRangesByAnchor: FluidRangesByAnchor;
+interface IDocumentState {
   order: number;
+  fluidRangesByAnchor: FluidRangesByAnchor;
 }
 
-export interface IBatchState {
+export type DocumentState = Expand<IDocumentState>;
+
+export type StylesheetParams = DeepReadonlyExcept<
+  {
+    sheet: CSSStyleSheet;
+    breakpoints: number[];
+    globalBaselineWidth: number;
+    documentState: DocumentState;
+  },
+  "documentState"
+>;
+
+interface IBatchState {
   currentBatch: StyleBatch | null;
   batches: StyleBatch[];
 }
 
-export interface IBatchStyleRuleState extends IBatchState {
-  baselineWidth: number;
-}
+export type BatchState = Expand<IBatchState>;
 
-export interface IProcessStyleRuleStateBase {
-  batches: StyleBatch[];
-  fluidRangesByAnchor: FluidRangesByAnchor;
-  breakpoints: number[];
-}
+export type StyleRuleParams = Pick<
+  StylesheetParams,
+  "breakpoints" | "documentState"
+> &
+  DeepReadonly<{
+    batches: StyleBatch[];
+    index: number;
+    batch: StyleBatch;
+    rule: CSSStyleRule;
+  }>;
 
-export interface IProcessStyleRuleState extends IProcessStyleRuleStateBase {
-  index: number;
-  batch: StyleBatch;
-  rule: CSSStyleRule;
-  order: number;
-}
+export type SelectorParams = Omit<StyleRuleParams, "documentState"> &
+  DeepReadonlyExcept<
+    {
+      order: number;
+      fluidRangesByAnchor: FluidRangesByAnchor;
+      selector: string;
+      property: string;
+      rule: CSSStyleRule;
+    },
+    "fluidRangesByAnchor"
+  >;
 
-export interface IProcessSelectorState extends IProcessStyleRuleState {
-  selector: string;
-  property: string;
-  rule: CSSStyleRule;
-}
+export type FluidRangeParams = Pick<
+  SelectorParams,
+  "selector" | "property" | "order" | "fluidRangesByAnchor"
+>;
 
-export interface IGetFluidRangesState {
-  selector: string;
-  property: string;
-  fluidRangesByAnchor: FluidRangesByAnchor;
-  order: number;
-}
-
-export interface IGetMaxValueParams {
-  index: number;
-  batches: StyleBatch[];
-  batch: StyleBatch;
-  property: string;
-  selector: string;
-  fluidRangesByAnchor: FluidRangesByAnchor;
-  isEligibleForSingleValue: boolean;
-  minValue: IFluidValue | IFluidValue[];
-}
+export type MaxValueParams = Pick<
+  SelectorParams,
+  "property" | "selector" | "fluidRangesByAnchor"
+> &
+  Pick<StyleRuleParams, "batches" | "index"> &
+  DeepReadonly<{
+    batch: Omit<StyleBatch, "rules" | "isMediaQuery">;
+  }>;

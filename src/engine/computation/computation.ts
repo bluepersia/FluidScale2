@@ -1,18 +1,18 @@
 import { Calc, CalcUnits, IFluidValue } from "../../index.types";
-import { IComputationState } from "../engine.types";
-import { IComputeFluidValueState } from "./computation.types";
-import { calcEmValue, calcPercentValue } from "./unitsConversion";
+import { ComputationParams } from "../engine.types";
+import { FluidValueComputationState } from "./computation.types";
+import { convertToPixels } from "./unitsConversion";
 
 export function computeValueForRange(
-  state: IComputationState
+  state: ComputationParams
 ): number | number[] {
   const { progress, fluidRange } = state;
   let valueResult: number | number[] | string;
   if (progress >= 1) {
-    valueResult = computeFluidValue(fluidRange.maxValue, state, "max");
+    valueResult = computeFluidValue(fluidRange.maxValue, state);
   } else {
-    let minValuePx = computeFluidValue(fluidRange.minValue, state, "min");
-    let maxValuePx = computeFluidValue(fluidRange.maxValue, state, "max");
+    let minValuePx = computeFluidValue(fluidRange.minValue, state);
+    let maxValuePx = computeFluidValue(fluidRange.maxValue, state);
 
     if (Array.isArray(minValuePx) || Array.isArray(maxValuePx)) {
       valueResult = calcValueArrayFromProgress(
@@ -59,11 +59,11 @@ function calcValueFromProgress(
 
 function computeFluidValue(
   fluidValue: IFluidValue | IFluidValue[],
-  state: IComputationState,
-  minOrMax: "min" | "max"
+  state: ComputationParams
 ): number | number[] {
   const { el, property } = state;
-  if (!Array.isArray(fluidValue)) {
+  const isSingleValue = !Array.isArray(fluidValue);
+  if (isSingleValue) {
     if (
       (property === "grid-template-columns" ||
         property === "grid-template-rows") &&
@@ -71,13 +71,10 @@ function computeFluidValue(
     )
       return computeGridTemplateValue(el, property, fluidValue.value);
 
-    return computeValue(fluidValue.value, fluidValue.unit, {
-      ...state,
-      minOrMax,
-    });
+    return computeValue(fluidValue.value, fluidValue.unit, state);
   } else {
     return fluidValue.map((value) => {
-      return computeValue(value.value, value.unit, { ...state, minOrMax });
+      return computeValue(value.value, value.unit, state);
     });
   }
 }
@@ -101,7 +98,7 @@ function computeGridTemplateValue(
 function computeValue(
   value: number | Calc | string,
   unit: string | CalcUnits,
-  computationState: IComputeFluidValueState
+  computationState: FluidValueComputationState
 ): number {
   if (typeof value === "number" && typeof unit === "string") {
     return convertToPixels(value, unit, computationState);
@@ -118,28 +115,6 @@ function computeValue(
   throw new Error(`Unknown value or unit: ${value} ${unit}`);
 }
 
-function convertToPixels(
-  value: number,
-  unit: string,
-  computationState: IComputeFluidValueState
-): number {
-  switch (unit) {
-    case "px":
-      return value;
-    case "em":
-      return calcEmValue(value, computationState);
-    case "rem":
-      return (
-        value *
-        parseFloat(getComputedStyle(window.document.documentElement).fontSize)
-      );
-    case "%":
-      return calcPercentValue(value, computationState);
-  }
-
-  return value;
-}
-
 function measureKeywordValue(
   element: HTMLElement,
   property: string,
@@ -147,7 +122,6 @@ function measureKeywordValue(
 ): number {
   element.style.setProperty(property, keyword);
 
-  // 6. Measure
   let value: number;
   if (property === "width" || property === "height") {
     value = element.getBoundingClientRect()[property];
@@ -162,7 +136,7 @@ function measureKeywordValue(
 function computeCalc(
   calc: Calc,
   unit: CalcUnits,
-  state: IComputeFluidValueState
+  state: FluidValueComputationState
 ): number {
   if (calc.type === "calc") return evaluateCalc(calc.values, unit.units, state);
 
@@ -189,7 +163,7 @@ function isArithmetic(value: string): boolean {
 function evaluateCalc(
   values: (string | number | Calc)[],
   units: (string | CalcUnits)[],
-  state: IComputeFluidValueState
+  state: FluidValueComputationState
 ): number {
   const expression = values
     .map((value, index) => {

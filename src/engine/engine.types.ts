@@ -1,37 +1,65 @@
-import { FluidRangeMetaData, IFluidRange } from "../index.types";
+import {
+  DeepReadonly,
+  FluidRangeMetaData,
+  FluidRangesByAnchor,
+  IFluidBreakpointRange,
+} from "../index.types";
 import { FluidProperty } from "./fluidProperty";
 
+export interface IConfig {}
+
+export interface IState {
+  fluidRangesByAnchor: DeepReadonly<FluidRangesByAnchor>;
+  breakpoints: readonly number[];
+  stableWindowWidth: number;
+  stableWindowHeight: number;
+  isMutationObserverInitialized: boolean;
+  isIntersectionObserverInitialized: boolean;
+}
+
 export interface IFluidProperty {
-  el: HTMLElement;
-  fluidBreakpoints: (IFluidRange | null)[];
   metaData: FluidRangeMetaData;
   state: FluidPropertyState;
-  update(): void;
+  update(breakpoints: number[]): void;
 }
 
 export type FluidPropertyState = {
   property: string;
   value: string;
-  appliedValue: string;
-  appliedWidth: number;
   fluidProperty: FluidProperty | null;
-  order: number;
+  orderID: number;
+  calcedSizePercentEl?: HTMLElement;
+  /** We keep track of the last applied state, to avoid re-computing the value if the width didn't change */
+  appliedState?: AppliedFluidPropertyState;
+};
+
+export type AppliedFluidPropertyState = {
+  value: string;
+  fluidProperty: FluidProperty;
+  orderID: number;
+  calcedSizePercentEl?: HTMLElement;
 };
 
 export type FluidPropertyConfig = {
   el: HTMLElement;
   metaData: FluidRangeMetaData;
-  fluidBreakpoints: (IFluidRange | null)[];
+  fluidBreakpoints: (IFluidBreakpointRange | null)[];
 };
 
-export interface IComputationStateBase {
+export type ComputationParamsBase = Readonly<{
   progress: number;
-  fluidRange: IFluidRange;
-  minBreakpoint: number;
-  maxBreakpoint: number;
-}
+  fluidRange: IFluidBreakpointRange;
+}>;
 
-export interface IComputationState extends IComputationStateBase {
+export type ComputationParams = ComputationParamsBase &
+  Readonly<{
+    el: HTMLElement;
+    property: string;
+  }>;
+
+export type InsertFluidPropertyParams = Readonly<{
   el: HTMLElement;
-  property: string;
-}
+  metaData: FluidRangeMetaData;
+  fluidRanges: readonly DeepReadonly<IFluidBreakpointRange>[];
+  breakpoints: readonly number[];
+}>;

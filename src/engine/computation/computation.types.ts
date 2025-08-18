@@ -1,5 +1,10 @@
-import { IComputationState } from "../engine.types";
+import { ComputationParams } from "../engine.types";
 
-export interface IComputeFluidValueState extends IComputationState {
-  minOrMax: "min" | "max";
+export interface FluidValueComputationState
+  extends Pick<ComputationParams, "el" | "property"> {}
+
+export interface ICalcPercentTargetBlueprint {
+  el: HTMLElement;
+  checkResize: boolean;
+  targetStyleProperties: string[];
 }
