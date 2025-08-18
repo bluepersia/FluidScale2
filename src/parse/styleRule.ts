@@ -1,9 +1,9 @@
 import {
-  IProcessStyleRuleState,
-  IProcessSelectorState,
-  IGetFluidRangesState,
+  StyleRuleParams,
+  SelectorParams,
+  FluidRangeParams,
 } from "./parse.types";
-import { IFluidRange } from "../index.types";
+import { IFluidBreakpointRange } from "../index.types";
 import { getMinMaxValue } from "./values";
 
 const FLUID_PROPERTY_NAMES = [
@@ -43,15 +43,23 @@ const SHORTHAND_PROPERTY_NAMES = [
   "border-radius",
 ];
 
-export function processStyleRule(state: IProcessStyleRuleState): void {
-  const { rule } = state;
+export function processStyleRule(params: StyleRuleParams): void {
+  const { rule, documentState } = params;
+  const order = documentState.order++;
+
   for (const property of FLUID_PROPERTY_NAMES) {
     if (SHORTHAND_PROPERTY_NAMES.includes(property)) continue;
 
     const selectors = splitSelector(rule.selectorText);
 
     for (const selector of selectors) {
-      processSelector({ ...state, selector, property });
+      processSelector({
+        ...params,
+        selector,
+        property,
+        order,
+        fluidRangesByAnchor: documentState.fluidRangesByAnchor,
+      });
     }
   }
 }
@@ -60,8 +68,8 @@ export function splitSelector(selector: string): string[] {
   return selector.split(",").map((selector) => selector.trim());
 }
 
-function processSelector(state: IProcessSelectorState): void {
-  const minMaxValueResult = getMinMaxValue(state);
+function processSelector(params: SelectorParams): void {
+  const minMaxValueResult = getMinMaxValue(params);
 
   if (!minMaxValueResult) return;
 
@@ -71,22 +79,40 @@ function processSelector(state: IProcessSelectorState): void {
   fluidRanges.push({
     minValue,
     maxValue,
-    breakpointIndex: state.breakpoints.indexOf(state.batch.width),
-    nextBreakpointIndex: state.breakpoints.indexOf(maxValueBatchWidth),
+    minIndex: params.breakpoints.indexOf(params.batch.width),
+    maxIndex: params.breakpoints.indexOf(maxValueBatchWidth),
   });
 }
 
-export function getFluidRanges(state: IGetFluidRangesState): IFluidRange[] {
-  const { selector, property, order, fluidRangesByAnchor } = state;
-  const selectorSegments = selector.split(" ");
+export function getFluidRanges(
+  params: FluidRangeParams
+): IFluidBreakpointRange[] {
+  const { selector, property, order, fluidRangesByAnchor } = params;
+  const strippedSelector = stripModifiers(selector);
+  const dynamicSelector = strippedSelector === selector ? undefined : selector;
+  const selectorSegments = strippedSelector.split(" ");
   const anchor = selectorSegments[selectorSegments.length - 1];
 
   let fluidRangesBySelector = fluidRangesByAnchor[anchor];
 
   if (!fluidRangesBySelector) {
-    state.fluidRangesByAnchor[anchor] = fluidRangesBySelector = {
-      [selector]: [{ property, order }, []],
+    params.fluidRangesByAnchor[anchor] = fluidRangesBySelector = {
+      [strippedSelector]: [{ property, orderID: order, dynamicSelector }, []],
     };
   }
   return fluidRangesBySelector[selector][1];
+}
+
+function stripModifiers(selectorText: string): string {
+  return (
+    selectorText
+      // remove BEM modifiers (anything starting with `--` until next non-name char)
+      .replace(/--[a-zA-Z0-9_-]+/g, "")
+      // remove common dynamic pseudos
+      .replace(
+        /:(hover|focus|active|visited|disabled|checked|focus-visible|focus-within)/g,
+        ""
+      )
+      .trim()
+  );
 }

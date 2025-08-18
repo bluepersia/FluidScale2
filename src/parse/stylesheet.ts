@@ -1,10 +1,4 @@
-import {
-  StyleBatch,
-  IBatchState,
-  IBatchStyleRuleState,
-  IProcessStyleRuleState,
-  IParseStylesheetState,
-} from "./parse.types";
+import { StyleBatch, BatchState, StylesheetParams } from "./parse.types";
 import { ParsedDocument } from "../index.types";
 import { processStyleRule } from "./styleRule";
 
@@ -20,13 +14,16 @@ export function parseDocument(document: Document): ParsedDocument | null {
   const rulesPerSheet: CSSRule[][] = sheets.map((sheet) => [
     ...Array.from(sheet.cssRules),
   ]);
-  const state: IParseStylesheetState = makeParseStylesheetState(rulesPerSheet);
+  const stylesheetParams = makeStylesheetParams(rulesPerSheet);
 
   for (const sheet of sheets) {
-    parseStylesheet(sheet, state);
+    parseStylesheet({ sheet, ...stylesheetParams });
   }
 
-  return state;
+  return {
+    ...stylesheetParams,
+    fluidRangesByAnchor: stylesheetParams.documentState.fluidRangesByAnchor,
+  };
 }
 
 function isStyleSheetsAccessible(document: Document) {
@@ -41,22 +38,18 @@ function isStyleSheetsAccessible(document: Document) {
   return false;
 }
 
-function makeParseStylesheetState(
+function makeStylesheetParams(
   rulesPerSheet: CSSRule[][]
-): IParseStylesheetState {
+): Omit<StylesheetParams, "sheet"> {
   return {
+    documentState: { order: 0, fluidRangesByAnchor: {} },
     breakpoints: getBreakpoints(rulesPerSheet),
     globalBaselineWidth: getBaselineWidth(rulesPerSheet.flat()) ?? 0,
-    fluidRangesByAnchor: {},
-    order: 0,
   };
 }
 
-function parseStylesheet(
-  sheet: CSSStyleSheet,
-  state: IParseStylesheetState
-): void {
-  let { globalBaselineWidth, order } = state;
+function parseStylesheet(params: StylesheetParams): void {
+  let { sheet, globalBaselineWidth } = params;
 
   const rules: CSSRule[] = Array.from(sheet.cssRules);
 
@@ -64,15 +57,13 @@ function parseStylesheet(
   for (const [index, batch] of batches.entries()) {
     for (const rule of batch.rules) {
       if (rule instanceof CSSStyleRule) {
-        const styleRuleState: IProcessStyleRuleState = {
-          ...state,
+        processStyleRule({
+          ...params,
           batches,
           index,
           batch,
           rule,
-          order: order++,
-        };
-        processStyleRule(styleRuleState);
+        });
       }
     }
   }
@@ -97,14 +88,17 @@ function batchStylesheet(
   rules: CSSRule[],
   globalBaselineWidth: number
 ): StyleBatch[] {
-  const state: IBatchStyleRuleState = {
+  const state: BatchState = {
     currentBatch: null,
     batches: [],
-    baselineWidth: getBaselineWidth(rules) ?? globalBaselineWidth,
   };
+
+  const baselineWidth = getBaselineWidth(rules) ?? globalBaselineWidth;
+
   for (const rule of rules) {
-    if (rule instanceof CSSStyleRule) batchStyleRule(state, rule);
-    else if (rule instanceof CSSMediaRule) batchMediaRule(state, rule);
+    if (rule instanceof CSSStyleRule)
+      batchStyleRule(rule, state, baselineWidth);
+    else if (rule instanceof CSSMediaRule) batchMediaRule(rule, state);
   }
   return state.batches;
 }
@@ -127,8 +121,12 @@ function getMinWidth(mediaText: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-function batchStyleRule(state: IBatchStyleRuleState, rule: CSSStyleRule): void {
-  let { currentBatch, batches, baselineWidth } = state;
+function batchStyleRule(
+  rule: CSSStyleRule,
+  state: BatchState,
+  baselineWidth: number
+): void {
+  let { currentBatch, batches } = state;
   if (currentBatch === null) {
     currentBatch = {
       width: baselineWidth,
@@ -141,7 +139,7 @@ function batchStyleRule(state: IBatchStyleRuleState, rule: CSSStyleRule): void {
   currentBatch.rules.push(rule);
 }
 
-function batchMediaRule(state: IBatchState, rule: CSSMediaRule): void {
+function batchMediaRule(rule: CSSMediaRule, state: BatchState): void {
   state.currentBatch = null;
 
   const minWidth = getMinWidth(rule.media.mediaText);
