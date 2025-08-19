@@ -1,35 +1,35 @@
-import { IFluidBreakpointRange, IFluidValue } from "../index.types";
-import { MaxValueParams, SelectorParams } from "./parse.types";
+import { IFluidValue } from "../index.types";
+import {
+  MaxValueParams,
+  MaxValueResult,
+  MinMaxValueParams,
+  MinMaxValueResult,
+  NextBatchParams,
+} from "./parse.types";
 import { getFluidRanges, splitSelector } from "./styleRule";
 
-export function getMinMaxValue(
-  params: SelectorParams
-):
-  | [
-      IFluidValue | IFluidValue[],
-      IFluidValue | IFluidValue[],
-      number,
-      IFluidBreakpointRange[]
-    ]
-  | undefined {
-  const { rule, property } = params;
+export function getFluidRangeBlueprint(
+  params: MinMaxValueParams
+): MinMaxValueResult | undefined {
+  const { rule, property, spanEnd } = params;
 
-  const minValue = getMinValue(rule, property);
+  const minValue = getMinValue(rule, property, spanEnd);
   if (!minValue) return;
-
-  const fluidRanges = getFluidRanges(params);
 
   let maxValueResult = getMaxValue(params);
   if (!maxValueResult) return;
 
-  return [minValue, ...maxValueResult, fluidRanges];
+  const fluidRanges = getFluidRanges(params);
+
+  return { minValue, ...maxValueResult, fluidRanges };
 }
 
 function getMinValue(
   rule: CSSStyleRule,
-  property: string
+  property: string,
+  spanEnd?: string | undefined
 ): IFluidValue | IFluidValue[] | null {
-  const value = rule.style.getPropertyValue(property);
+  const value = spanEnd || rule.style.getPropertyValue(property);
   if (!value) return null;
   return parseFluidValue(value, property);
 }
@@ -163,36 +163,41 @@ function splitOuter(str: string): string[] {
   return result;
 }
 
-function getMaxValue(
-  params: MaxValueParams
-): [IFluidValue | IFluidValue[], number] | null {
-  const {
-    index,
-    batches,
-    property,
-    selector,
-    batch: { width },
-  } = params;
+function getMaxValue(params: MaxValueParams): MaxValueResult | null {
+  const { index, batches } = params;
 
   for (let i = index + 1; i < batches.length; i++) {
     const nextBatch = batches[i];
 
     if (!nextBatch.isMediaQuery) break;
 
-    if (nextBatch.isMediaQuery && nextBatch.width > width) {
-      for (const nextRule of nextBatch.rules) {
-        if (nextRule instanceof CSSStyleRule) {
-          if (splitSelector(nextRule.selectorText).includes(selector)) {
-            const nextValue = nextRule.style.getPropertyValue(property);
-            if (nextValue) {
-              const parsedValue = parseFluidValue(nextValue, property);
-              if (parsedValue) return [parsedValue, nextBatch.width];
-            }
+    const nextBatchResult = processNextBatch({ nextBatch, ...params });
+    if (nextBatchResult) return nextBatchResult;
+  }
+
+  return null;
+}
+
+function processNextBatch(params: NextBatchParams): MaxValueResult | null {
+  const {
+    nextBatch,
+    batch: { width },
+    selector,
+    property,
+  } = params;
+  if (nextBatch.isMediaQuery && nextBatch.width > width) {
+    for (const nextRule of nextBatch.rules) {
+      if (nextRule instanceof CSSStyleRule) {
+        if (splitSelector(nextRule.selectorText).includes(selector)) {
+          const nextValue = nextRule.style.getPropertyValue(property);
+          if (nextValue) {
+            const maxValue = parseFluidValue(nextValue, property);
+            if (maxValue)
+              return { maxValue, maxValueBatchWidth: nextBatch.width };
           }
         }
       }
     }
   }
-
   return null;
 }

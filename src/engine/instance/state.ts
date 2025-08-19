@@ -1,6 +1,6 @@
 import { IConfig, IState } from "../engine.types";
 import { handleIntersection, handleResize } from "./observers";
-import { DeepReadonly, FluidRangesByAnchor } from "../../index.types";
+import { FluidRangesByAnchor } from "../../index.types";
 
 const state: IState = {
   fluidRangesByAnchor: {},
@@ -11,36 +11,37 @@ const state: IState = {
   isIntersectionObserverInitialized: false,
 };
 
-export function getState(): DeepReadonly<IState> {
+function getState(): Readonly<IState> {
   return state;
 }
 
-export const config: IConfig = {
+const config: IConfig = {
   emMode: "linear",
 };
 
-export const allElements: Element[] = [];
-export const computedStyleCache: Map<HTMLElement, CSSStyleDeclaration> =
-  new Map();
-export const boundingClientRectCache: Map<HTMLElement, DOMRect> = new Map();
+const allElements: Element[] = [];
+const computedStyleCache: Map<HTMLElement, CSSStyleDeclaration> = new Map();
+const boundingClientRectCache: Map<HTMLElement, DOMRect> = new Map();
 
-export const intersectionObserver: IntersectionObserver =
-  new IntersectionObserver(handleIntersection, {
+const intersectionObserver: IntersectionObserver = new IntersectionObserver(
+  handleIntersection,
+  {
     root: null,
     rootMargin: "100%",
     threshold: 0,
-  });
+  }
+);
 
-export const resizeObserver: ResizeObserver = new ResizeObserver(handleResize);
+const resizeObserver: ResizeObserver = new ResizeObserver(handleResize);
 
 /** Elements that entered the viewport, and get fluidly updated each frame. */
-export const visibleElements: Set<HTMLElement> = new Set();
+const visibleElements: Set<HTMLElement> = new Set();
 /** Elements that exited the viewport, and are in the queue to get flushed back to their default values in the next frame update. */
-export const pendingHiddenElements: Set<HTMLElement> = new Set();
+const pendingHiddenElements: Set<HTMLElement> = new Set();
 
-export function setInitState(
-  fluidRangesByAnchor: DeepReadonly<FluidRangesByAnchor>,
-  breakpoints: readonly number[],
+function setInitState(
+  fluidRangesByAnchor: FluidRangesByAnchor,
+  breakpoints: number[],
   contextKey?: unknown
 ) {
   if (contextKey === "engineInitializationToken") {
@@ -49,26 +50,26 @@ export function setInitState(
   }
 }
 
-export function setStableWindowState(contextKey?: unknown) {
+function setStableWindowState(contextKey?: unknown) {
   if (contextKey === "stableWindowWidthUpdateToken") {
     state.stableWindowWidth = getStableWindowWidth();
     state.stableWindowHeight = getStableWindowHeight();
   }
 }
 
-export function setMutationObserverState(contextKey?: unknown) {
+function setMutationObserverState(contextKey?: unknown) {
   if (contextKey === "mutationObserverInitializationToken") {
     state.isMutationObserverInitialized = true;
   }
 }
 
-export function setIntersectionObserverState(contextKey?: unknown) {
+function setIntersectionObserverState(contextKey?: unknown) {
   if (contextKey === "intersectionObserverInitializationToken") {
     state.isIntersectionObserverInitialized = true;
   }
 }
 
-export function getComputedStyle(el: HTMLElement): CSSStyleDeclaration {
+function getComputedStyle(el: HTMLElement): CSSStyleDeclaration {
   if (computedStyleCache.has(el)) {
     return computedStyleCache.get(el) as CSSStyleDeclaration;
   }
@@ -77,7 +78,7 @@ export function getComputedStyle(el: HTMLElement): CSSStyleDeclaration {
   return computedStyle;
 }
 
-export function getBoundingClientRect(el: HTMLElement): DOMRect {
+function getBoundingClientRect(el: HTMLElement): DOMRect {
   if (boundingClientRectCache.has(el)) {
     return boundingClientRectCache.get(el) as DOMRect;
   }
@@ -93,3 +94,23 @@ function getStableWindowWidth(): number {
 function getStableWindowHeight(): number {
   return window.visualViewport?.height ?? window.innerHeight;
 }
+
+export {
+  getState,
+  config,
+  allElements,
+  intersectionObserver,
+  resizeObserver,
+  visibleElements,
+  pendingHiddenElements,
+  setInitState,
+  setStableWindowState,
+  setMutationObserverState,
+  setIntersectionObserverState,
+  getComputedStyle,
+  getBoundingClientRect,
+  computedStyleCache,
+  boundingClientRectCache,
+  getStableWindowWidth,
+  getStableWindowHeight,
+};

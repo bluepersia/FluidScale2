@@ -1,7 +1,7 @@
 import { ComputationParams } from "../engine.types";
 
 export interface FluidValueComputationState
-  extends Pick<ComputationParams, "el" | "property"> {}
+  extends Pick<ComputationParams, "el" | "property" | "breakpoints"> {}
 
 export interface ICalcPercentTargetBlueprint {
   el: HTMLElement;

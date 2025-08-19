@@ -1,11 +1,11 @@
 import {
-  DeepReadonly,
-  DeepReadonlyExcept,
   Expand,
   FluidRangesByAnchor,
+  IFluidRange,
+  IFluidValue,
 } from "../index.types";
 
-export type StyleBatch = {
+type StyleBatch = {
   width: number;
   isMediaQuery: boolean;
   rules: CSSRule[];
@@ -16,58 +16,144 @@ interface IDocumentState {
   fluidRangesByAnchor: FluidRangesByAnchor;
 }
 
-export type DocumentState = Expand<IDocumentState>;
+type DocumentState = Expand<IDocumentState>;
 
-export type StylesheetParams = DeepReadonlyExcept<
-  {
-    sheet: CSSStyleSheet;
-    breakpoints: number[];
-    globalBaselineWidth: number;
-    documentState: DocumentState;
-  },
-  "documentState"
->;
+type StylesheetParams = Readonly<{
+  rules: CSSRule[];
+  breakpoints: number[];
+  globalBaselineWidth: number;
+}> & {
+  documentState: DocumentState;
+};
+
+interface ISpans {
+  [selector: string]: {
+    [property: string]: string;
+  };
+}
+
+type Spans = Expand<ISpans>;
 
 interface IBatchState {
   currentBatch: StyleBatch | null;
   batches: StyleBatch[];
 }
 
-export type BatchState = Expand<IBatchState>;
+type BatchState = Expand<IBatchState>;
 
-export type StyleRuleParams = Pick<
-  StylesheetParams,
-  "breakpoints" | "documentState"
-> &
-  DeepReadonly<{
+type StyleRuleParams = Pick<StylesheetParams, "breakpoints" | "documentState"> &
+  Readonly<{
     batches: StyleBatch[];
     index: number;
     batch: StyleBatch;
     rule: CSSStyleRule;
+  }> & {
+    spans: Spans;
+  };
+
+type FluidPropertyParams = Pick<
+  StyleRuleParams,
+  "rule" | "spans" | "batches" | "index" | "batch" | "breakpoints"
+> &
+  Readonly<{
+    property: string;
+    ruleSpans: RuleSpans;
+    order: number;
+    lockVarValue: string;
+  }> & {
+    fluidRangesByAnchor: FluidRangesByAnchor;
+  };
+
+type RuleSpans = Readonly<{
+  spanStarts: string[];
+  spanEnds: string[];
+}>;
+
+type SelectorParams = Pick<
+  FluidPropertyParams,
+  | "spans"
+  | "property"
+  | "rule"
+  | "batches"
+  | "index"
+  | "order"
+  | "batch"
+  | "fluidRangesByAnchor"
+  | "breakpoints"
+  | "lockVarValue"
+> &
+  Readonly<{
+    selector: string;
+    isSpanStart: boolean;
+    spanEnd: string | undefined;
   }>;
 
-export type SelectorParams = Omit<StyleRuleParams, "documentState"> &
-  DeepReadonlyExcept<
-    {
-      order: number;
-      fluidRangesByAnchor: FluidRangesByAnchor;
-      selector: string;
-      property: string;
-      rule: CSSStyleRule;
-    },
-    "fluidRangesByAnchor"
-  >;
+type SpanParams = Pick<
+  SelectorParams,
+  "selector" | "property" | "rule" | "spans"
+>;
 
-export type FluidRangeParams = Pick<
+type MinMaxValueParams = Pick<
+  SelectorParams,
+  | "rule"
+  | "property"
+  | "fluidRangesByAnchor"
+  | "selector"
+  | "order"
+  | "batches"
+  | "index"
+  | "batch"
+  | "spanEnd"
+>;
+
+type MinMaxValueResult = {
+  minValue: IFluidValue | IFluidValue[];
+  maxValue: IFluidValue | IFluidValue[];
+  maxValueBatchWidth: number;
+  fluidRanges: IFluidRange[];
+};
+
+type FluidRangeParams = Pick<
+  SelectorParams,
+  "batch" | "breakpoints" | "lockVarValue" | "property"
+> &
+  MinMaxValueResult;
+
+type FluidRangesParams = Pick<
   SelectorParams,
   "selector" | "property" | "order" | "fluidRangesByAnchor"
 >;
 
-export type MaxValueParams = Pick<
-  SelectorParams,
-  "property" | "selector" | "fluidRangesByAnchor"
-> &
+type MaxValueParams = Pick<SelectorParams, "property" | "selector"> &
   Pick<StyleRuleParams, "batches" | "index"> &
-  DeepReadonly<{
+  Readonly<{
     batch: Omit<StyleBatch, "rules" | "isMediaQuery">;
   }>;
+
+type MaxValueResult = {
+  maxValue: IFluidValue | IFluidValue[];
+  maxValueBatchWidth: number;
+};
+type NextBatchParams = Pick<MaxValueParams, "selector" | "property" | "batch"> &
+  Readonly<{
+    nextBatch: StyleBatch;
+  }>;
+
+export {
+  StyleBatch,
+  StylesheetParams,
+  Spans,
+  BatchState,
+  StyleRuleParams,
+  FluidPropertyParams,
+  SelectorParams,
+  SpanParams,
+  MinMaxValueParams,
+  MinMaxValueResult,
+  FluidRangeParams,
+  FluidRangesParams,
+  MaxValueParams,
+  MaxValueResult,
+  NextBatchParams,
+  RuleSpans,
+};

@@ -1,4 +1,4 @@
-import { IFluidBreakpointRange } from "../index.types";
+import { IFluidRange } from "../index.types";
 import { FluidRangeMetaData } from "../index.types";
 import {
   IFluidProperty,
@@ -7,12 +7,11 @@ import {
   ComputationParamsBase,
 } from "./engine.types";
 import { computeValueForRange } from "./computation/computation";
-import { getState } from "./instance/state";
-import { windowWidthIsSameSinceLastElementUpdate } from "./instance/update";
+import { isWidthSame } from "../utils";
 
 export class FluidProperty implements IFluidProperty {
   el: HTMLElement;
-  fluidBreakpoints: (IFluidBreakpointRange | null)[];
+  fluidBreakpoints: (IFluidRange | null)[];
   metaData: FluidRangeMetaData;
   specialType: "grid" | "flex" | null;
   state: FluidPropertyState;
@@ -77,14 +76,10 @@ export class FluidProperty implements IFluidProperty {
       orderID: appliedOrderID,
       fluidProperty: appliedFluidProperty,
       calcedSizePercentEl: appliedCalcedSizePercentEl,
+      windowWidth: appliedWindowWidth,
     } = appliedState;
 
-    if (
-      windowWidthIsSameSinceLastElementUpdate(
-        this.el,
-        getState().stableWindowWidth
-      )
-    ) {
+    if (isWidthSame(window.innerWidth, appliedWindowWidth)) {
       if (this === appliedFluidProperty) {
         // If the styles on which % calculation is based have changed, we want to re-compute the value
         if (this.el.inlineStylesChanged) return false;
@@ -127,7 +122,7 @@ export class FluidProperty implements IFluidProperty {
         const maxBreakpoint = breakpoints[fluidRange.maxIndex];
         const progress =
           (window.innerWidth - minBreakpoint) / (maxBreakpoint - minBreakpoint);
-        return { progress, fluidRange };
+        return { progress, fluidRange, breakpoints };
       }
     }
 

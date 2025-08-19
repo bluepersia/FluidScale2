@@ -1,10 +1,19 @@
 import {
   StyleRuleParams,
   SelectorParams,
+  FluidRangesParams,
   FluidRangeParams,
+  FluidPropertyParams,
 } from "./parse.types";
-import { IFluidBreakpointRange } from "../index.types";
-import { getMinMaxValue } from "./values";
+import { IFluidRange } from "../index.types";
+import { getFluidRangeBlueprint } from "./values";
+import {
+  applySpan,
+  getRuleSpans,
+  getSpanEndValue,
+  getSpanFlags,
+  parseLocks,
+} from "./specialCases";
 
 const FLUID_PROPERTY_NAMES = [
   "font-size",
@@ -43,50 +52,93 @@ const SHORTHAND_PROPERTY_NAMES = [
   "border-radius",
 ];
 
-export function processStyleRule(params: StyleRuleParams): void {
+function processStyleRule(params: StyleRuleParams): void {
   const { rule, documentState } = params;
-  const order = documentState.order++;
+  documentState.order++;
+
+  const ruleSpans = getRuleSpans(rule);
+  const lockVarValue = rule.style.getPropertyValue("--fluid-lock");
 
   for (const property of FLUID_PROPERTY_NAMES) {
-    if (SHORTHAND_PROPERTY_NAMES.includes(property)) continue;
-
-    const selectors = splitSelector(rule.selectorText);
-
-    for (const selector of selectors) {
-      processSelector({
-        ...params,
-        selector,
-        property,
-        order,
-        fluidRangesByAnchor: documentState.fluidRangesByAnchor,
-      });
-    }
+    parseFluidProperty({
+      property,
+      ...params,
+      ...documentState,
+      ruleSpans,
+      lockVarValue,
+    });
   }
 }
 
-export function splitSelector(selector: string): string[] {
+function parseFluidProperty(params: FluidPropertyParams): void {
+  const { property, ruleSpans, rule, spans } = params;
+
+  if (SHORTHAND_PROPERTY_NAMES.includes(property)) return;
+
+  const { isSpanStart, isSpanEnd } = getSpanFlags(property, ruleSpans);
+
+  const selectors = splitSelector(rule.selectorText);
+
+  for (const selector of selectors) {
+    const spanEnd = isSpanEnd
+      ? getSpanEndValue(selector, property, spans)
+      : undefined;
+    processSelector({
+      ...params,
+      selector,
+      isSpanStart,
+      spanEnd,
+    });
+  }
+}
+
+function splitSelector(selector: string): string[] {
   return selector.split(",").map((selector) => selector.trim());
 }
 
 function processSelector(params: SelectorParams): void {
-  const minMaxValueResult = getMinMaxValue(params);
+  const { isSpanStart } = params;
 
-  if (!minMaxValueResult) return;
+  if (isSpanStart) {
+    applySpan(params);
+    return;
+  }
 
-  const [minValue, maxValue, maxValueBatchWidth, fluidRanges] =
-    minMaxValueResult;
+  const fluidRangeBlueprint = getFluidRangeBlueprint(params);
 
-  fluidRanges.push({
-    minValue,
-    maxValue,
-    minIndex: params.breakpoints.indexOf(params.batch.width),
-    maxIndex: params.breakpoints.indexOf(maxValueBatchWidth),
+  if (!fluidRangeBlueprint) return;
+
+  const fluidRange: IFluidRange = makeFluidRange({
+    ...params,
+    ...fluidRangeBlueprint,
   });
+
+  fluidRangeBlueprint.fluidRanges.push(fluidRange);
 }
 
-export function getFluidRanges(
-  params: FluidRangeParams
-): IFluidBreakpointRange[] {
+function makeFluidRange(params: FluidRangeParams): IFluidRange {
+  const {
+    property,
+    batch: { width },
+    breakpoints,
+    maxValueBatchWidth,
+    lockVarValue,
+  } = params;
+
+  const locks = parseLocks(lockVarValue, property);
+
+  const fluidRange: IFluidRange = {
+    ...params,
+    minIndex: breakpoints.indexOf(width),
+    maxIndex: breakpoints.indexOf(maxValueBatchWidth),
+  };
+  if (locks) {
+    fluidRange.locks = locks;
+  }
+  return fluidRange;
+}
+
+function getFluidRanges(params: FluidRangesParams): IFluidRange[] {
   const { selector, property, order, fluidRangesByAnchor } = params;
   const strippedSelector = stripModifiers(selector);
   const dynamicSelector = strippedSelector === selector ? undefined : selector;
@@ -116,3 +168,5 @@ function stripModifiers(selectorText: string): string {
       .trim()
   );
 }
+
+export { processStyleRule, splitSelector, getFluidRanges };

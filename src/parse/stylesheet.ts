@@ -11,13 +11,11 @@ export function parseDocument(document: Document): ParsedDocument | null {
   }
   const sheets = Array.from(document.styleSheets);
 
-  const rulesPerSheet: CSSRule[][] = sheets.map((sheet) => [
-    ...Array.from(sheet.cssRules),
-  ]);
+  const rulesPerSheet: CSSRule[][] = getRulesPerSheet(sheets);
   const stylesheetParams = makeStylesheetParams(rulesPerSheet);
 
-  for (const sheet of sheets) {
-    parseStylesheet({ sheet, ...stylesheetParams });
+  for (const rules of rulesPerSheet) {
+    parseStylesheet({ rules, ...stylesheetParams });
   }
 
   return {
@@ -38,9 +36,22 @@ function isStyleSheetsAccessible(document: Document) {
   return false;
 }
 
+function getRulesPerSheet(sheets: CSSStyleSheet[]): CSSRule[][] {
+  return sheets
+    .filter((sheet) => {
+      try {
+        const rules = sheet.cssRules;
+        return rules ? true : false;
+      } catch (err) {
+        return false;
+      }
+    })
+    .map((sheet) => Array.from(sheet.cssRules));
+}
+
 function makeStylesheetParams(
   rulesPerSheet: CSSRule[][]
-): Omit<StylesheetParams, "sheet"> {
+): Omit<StylesheetParams, "rules"> {
   return {
     documentState: { order: 0, fluidRangesByAnchor: {} },
     breakpoints: getBreakpoints(rulesPerSheet),
@@ -49,9 +60,8 @@ function makeStylesheetParams(
 }
 
 function parseStylesheet(params: StylesheetParams): void {
-  let { sheet, globalBaselineWidth } = params;
-
-  const rules: CSSRule[] = Array.from(sheet.cssRules);
+  let { rules, globalBaselineWidth } = params;
+  const spans = {};
 
   const batches: StyleBatch[] = batchStylesheet(rules, globalBaselineWidth);
   for (const [index, batch] of batches.entries()) {
@@ -63,6 +73,7 @@ function parseStylesheet(params: StylesheetParams): void {
           index,
           batch,
           rule,
+          spans,
         });
       }
     }
@@ -70,19 +81,20 @@ function parseStylesheet(params: StylesheetParams): void {
 }
 
 function getBreakpoints(rulesPerSheet: CSSRule[][]): number[] {
-  const breakpoints = [];
+  const breakpoints = new Set<number>();
   for (const rules of rulesPerSheet) {
     for (const rule of rules) {
       if (rule instanceof CSSMediaRule) {
         const minWidth = getMinWidth(rule.media.mediaText);
         if (minWidth) {
-          breakpoints.push(minWidth);
+          breakpoints.add(minWidth);
         }
       }
     }
   }
-  breakpoints.sort((a, b) => a - b);
-  return breakpoints;
+  const breakpointsArray = Array.from(breakpoints);
+  breakpointsArray.sort((a, b) => a - b);
+  return breakpointsArray;
 }
 function batchStylesheet(
   rules: CSSRule[],

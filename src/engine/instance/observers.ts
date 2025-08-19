@@ -7,7 +7,7 @@ import {
   visibleElements,
 } from "./state";
 
-export function initMutationObserver(): void {
+function initMutationObserver(): void {
   if (getState().isMutationObserverInitialized) return;
   setMutationObserverState("mutationObserverInitializationToken");
 
@@ -30,7 +30,7 @@ export function initMutationObserver(): void {
   });
 }
 
-export function handleIntersection(entries: IntersectionObserverEntry[]): void {
+function handleIntersection(entries: IntersectionObserverEntry[]): void {
   for (const entry of entries) {
     if (entry.target instanceof HTMLElement) {
       if (entry.isIntersecting) {
@@ -54,10 +54,12 @@ export function handleIntersection(entries: IntersectionObserverEntry[]): void {
   setIntersectionObserverState("intersectionObserverUpdateToken");
 }
 
-export function handleResize(entries: ResizeObserverEntry[]): void {
+function handleResize(entries: ResizeObserverEntry[]): void {
   for (const entry of entries) {
     if (entry.target instanceof HTMLElement) {
       entry.target.isResized = true;
     }
   }
 }
+
+export { initMutationObserver, handleIntersection, handleResize };

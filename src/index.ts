@@ -1,10 +1,11 @@
 import { IConfig } from "./engine/engine.types";
 import { parseDocument } from "./parse/stylesheet";
 import { config as globalConfig, setInitState } from "./engine/instance/state";
-import { update } from "./engine/instance/update";
+import { updateWithState } from "./engine/instance/update";
 import { initMutationObserver } from "./engine/instance/observers";
-import { addElements } from "./engine/instance/setup";
+import { addElements as addElementsToEngine } from "./engine/instance/setup";
 
+/** Initialize the FluidScale engine. */
 export default function init(config: Partial<IConfig>): void {
   Object.assign(globalConfig, config);
   const parsedDocument = parseDocument(document);
@@ -19,8 +20,13 @@ export default function init(config: Partial<IConfig>): void {
   addElements([
     document.body,
     ...Array.from(document.body.querySelectorAll("*")).filter(
-      (el) => el instanceof HTMLElement
+      (el): el is HTMLElement => el instanceof HTMLElement
     ),
   ]);
-  requestAnimationFrame(update);
+  requestAnimationFrame(updateWithState);
+}
+
+/** Add elements to activate automatic fluid interpolation on them. */
+export function addElements(els: HTMLElement[]): void {
+  return addElementsToEngine(els);
 }
