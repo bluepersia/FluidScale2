@@ -1,46 +1,52 @@
 import { Calc, CalcUnits, IFluidValue } from "../../index.types";
-import { ComputationParams } from "../engine.types";
+import { ComputationParams, ValueArrayParams } from "../engine.types";
 import { FluidValueComputationState } from "./computation.types";
 import { convertToPixels } from "./unitsConversion";
 
 export function computeValueForRange(
-  state: ComputationParams
+  params: ComputationParams
 ): number | number[] {
-  const { progress, fluidRange } = state;
-  let valueResult: number | number[] | string;
+  const { progress, fluidRange } = params;
   if (progress >= 1) {
-    valueResult = computeFluidValue(fluidRange.maxValue, state);
+    return computeFluidValue(fluidRange.maxValue, params);
   } else {
-    let minValuePx = computeFluidValue(fluidRange.minValue, state);
-    let maxValuePx = computeFluidValue(fluidRange.maxValue, state);
+    let minValuePx = computeFluidValue(fluidRange.minValue, params);
+
+    if (fluidRange.locks === "all") {
+      return minValuePx;
+    }
+
+    let maxValuePx = computeFluidValue(fluidRange.maxValue, params);
 
     if (Array.isArray(minValuePx) || Array.isArray(maxValuePx)) {
-      valueResult = calcValueArrayFromProgress(
+      return calcValueArrayFromProgress({
         minValuePx,
         maxValuePx,
-        progress
-      );
-    } else {
-      valueResult = calcValueFromProgress(minValuePx, maxValuePx, progress);
+        progress,
+        locks: fluidRange.locks,
+      });
     }
-  }
 
-  return valueResult;
+    return calcValueFromProgress(minValuePx, maxValuePx, progress);
+  }
 }
 
-function calcValueArrayFromProgress(
-  minValue: number | number[],
-  maxValue: number | number[],
-  progress: number
-): number[] {
-  const minValuePxArray: number[] = Array.isArray(minValue)
-    ? minValue
-    : [minValue];
-  const maxValuePxArray: number[] = Array.isArray(maxValue)
-    ? maxValue
-    : [maxValue];
+function calcValueArrayFromProgress(params: ValueArrayParams): number[] {
+  const { minValuePx, maxValuePx, progress, locks } = params;
+
+  const minValuePxArray: number[] = Array.isArray(minValuePx)
+    ? minValuePx
+    : [minValuePx];
+
+  const maxValuePxArray: number[] = Array.isArray(maxValuePx)
+    ? maxValuePx
+    : [maxValuePx];
 
   return minValuePxArray.map((value, index) => {
+    if (locks?.includes(index)) {
+      return value;
+    }
+
     const maxValue =
       maxValuePxArray.length > index
         ? maxValuePxArray[index]

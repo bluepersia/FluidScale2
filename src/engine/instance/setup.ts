@@ -1,13 +1,8 @@
-import {
-  DeepReadonly,
-  FluidRangeMetaData,
-  IFluidBreakpointRange,
-} from "../../index.types";
+import { FluidRangeMetaData, IFluidRange } from "../../index.types";
 import { IFluidProperty, InsertFluidPropertyParams } from "../engine.types";
 import { FluidProperty } from "../fluidProperty";
 import { allElements, getState, intersectionObserver } from "./state";
 
-/** Add elements to activate automatic fluid interpolation on them. */
 export function addElements(els: HTMLElement[]): void {
   for (const el of els) {
     if (allElements.includes(el)) continue;
@@ -25,6 +20,7 @@ export function addElements(els: HTMLElement[]): void {
     processAnchorFluidRanges(el, el.tagName.toLowerCase());
 
     if (!el.fluidProperties) return;
+    el.isFluid = true;
     sortFluidProperties(el.fluidProperties);
 
     allElements.push(el);
@@ -46,14 +42,8 @@ function processAnchorFluidRanges(el: HTMLElement, anchor: string) {
 
 function processFluidRangesForSelector(
   el: HTMLElement,
-  entry: [
-    string,
-    readonly [
-      DeepReadonly<FluidRangeMetaData>,
-      readonly DeepReadonly<IFluidBreakpointRange>[]
-    ]
-  ],
-  breakpoints: readonly number[]
+  entry: [string, [FluidRangeMetaData, IFluidRange[]]],
+  breakpoints: number[]
 ) {
   const [selector, [metaData, fluidRanges]] = entry;
   const { dynamicSelector, property, orderID } = metaData;
@@ -65,13 +55,13 @@ function processFluidRangesForSelector(
 
   if (el.matches(selector)) {
     //If the element matches the base selector, we insert the fluid property.
-    const state: InsertFluidPropertyParams = {
+    const fluidPropertyParams: InsertFluidPropertyParams = {
       el,
       metaData,
       fluidRanges,
       breakpoints,
     };
-    insertFluidProperty(state);
+    insertFluidProperty(fluidPropertyParams);
   }
 }
 
@@ -91,8 +81,8 @@ function currentMainFluidPropertyIsHigherOrder(
   return false;
 }
 
-function insertFluidProperty(state: InsertFluidPropertyParams): void {
-  const { el, metaData, fluidRanges, breakpoints } = state;
+function insertFluidProperty(params: InsertFluidPropertyParams): void {
+  const { el, metaData, fluidRanges, breakpoints } = params;
 
   const fluidBreakpoints = new Array(breakpoints.length);
   for (const fluidRange of fluidRanges)

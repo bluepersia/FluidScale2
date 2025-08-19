@@ -1,5 +1,9 @@
 import { FluidValueComputationState } from "./computation.types";
-import { getBoundingClientRect, getState } from "../instance/state";
+import {
+  getBoundingClientRect,
+  getStableWindowHeight,
+  getStableWindowWidth,
+} from "../instance/state";
 import { applyStateForProperty, updateElement } from "../instance/update";
 
 export function convertToPixels(
@@ -49,32 +53,32 @@ export function convertToPixels(
     case "rlh":
       return calcLineHeight(window.document.documentElement, value);
     case "dvw":
-      return (value / 100) * getState().stableWindowWidth;
+      return (value / 100) * getStableWindowWidth();
     case "dvh":
-      return (value / 100) * getState().stableWindowHeight;
+      return (value / 100) * getStableWindowHeight();
     case "dvmin":
       return (
         (value / 100) *
-        Math.min(getState().stableWindowWidth, getState().stableWindowHeight)
+        Math.min(getStableWindowWidth(), getStableWindowHeight())
       );
     case "dvmax":
       return (
         (value / 100) *
-        Math.max(getState().stableWindowWidth, getState().stableWindowHeight)
+        Math.max(getStableWindowWidth(), getStableWindowHeight())
       );
   }
 
   return value;
 }
 
-export function calcEmValue(
+function calcEmValue(
   value: number,
   computationState: FluidValueComputationState
 ): number {
-  const { el, property } = computationState;
+  const { el, property, breakpoints } = computationState;
   if (property === "font-size") {
     const parent = el.parentElement || document.documentElement;
-    updateElement(parent);
+    updateElement(parent, breakpoints);
     return value * parseFloat(getComputedStyle(parent).fontSize);
   } else {
     applyStateForProperty(el, "font-size");
@@ -82,11 +86,11 @@ export function calcEmValue(
   }
 }
 
-export function calcPercentValue(
+function calcPercentValue(
   value: number,
   computationState: FluidValueComputationState
 ): number {
-  const { el, property } = computationState;
+  const { el, property, breakpoints } = computationState;
 
   const parent = el.parentElement || document.documentElement;
 
@@ -101,7 +105,7 @@ export function calcPercentValue(
     case "border-left-width":
     case "border-right-width":
       el.calcedSizePercentEl = parent;
-      return calcHorizontalPercentValue(value, parent);
+      return calcHorizontalPercentValue(value, parent, breakpoints);
 
     case "height":
     case "top":
@@ -113,10 +117,10 @@ export function calcPercentValue(
     case "border-top-width":
     case "border-bottom-width":
       el.calcedSizePercentEl = parent;
-      return calcVerticalPercentValue(value, parent);
+      return calcVerticalPercentValue(value, parent, breakpoints);
 
     case "font-size":
-      return calcFontSizePercentValue(value, parent);
+      return calcFontSizePercentValue(value, parent, breakpoints);
 
     case "line-height":
       return calcLineHeightPercentValue(value, el);
@@ -126,9 +130,10 @@ export function calcPercentValue(
 
 function calcHorizontalPercentValue(
   value: number,
-  parent: HTMLElement
+  parent: HTMLElement,
+  breakpoints: number[]
 ): number {
-  updateElement(parent);
+  updateElement(parent, breakpoints);
   const parentRect = getBoundingClientRect(parent);
   const parentStyle = getComputedStyle(parent);
   const [paddingLeft, paddingRight] = [
@@ -139,8 +144,12 @@ function calcHorizontalPercentValue(
   return (value / 100) * parentWidth;
 }
 
-function calcVerticalPercentValue(value: number, parent: HTMLElement): number {
-  updateElement(parent);
+function calcVerticalPercentValue(
+  value: number,
+  parent: HTMLElement,
+  breakpoints: number[]
+): number {
+  updateElement(parent, breakpoints);
   const parentRect = getBoundingClientRect(parent);
   const parentStyle = getComputedStyle(parent);
   const [paddingTop, paddingBottom] = [
@@ -151,8 +160,12 @@ function calcVerticalPercentValue(value: number, parent: HTMLElement): number {
   return (value / 100) * parentHeight;
 }
 
-function calcFontSizePercentValue(value: number, parent: HTMLElement): number {
-  updateElement(parent);
+function calcFontSizePercentValue(
+  value: number,
+  parent: HTMLElement,
+  breakpoints: number[]
+): number {
+  updateElement(parent, breakpoints);
   const parentStyle = getComputedStyle(parent);
   const parentFontSize = parseFloat(parentStyle.fontSize);
   return (value / 100) * parentFontSize;
@@ -164,11 +177,7 @@ function calcLineHeightPercentValue(value: number, el: HTMLElement): number {
   return (value / 100) * elFontSize;
 }
 
-export function calcGlyph(
-  el: HTMLElement,
-  value: number,
-  glyph: "x" | "0"
-): number {
+function calcGlyph(el: HTMLElement, value: number, glyph: "x" | "0"): number {
   const testEl = document.createElement("span");
   testEl.style.font = getComputedStyle(el).font;
   testEl.textContent = glyph;

@@ -11,33 +11,32 @@ import {
 } from "./state";
 
 let updateTime: number = performance.now();
-export function update(): void {
+function update(breakpoints: number[]): void {
   updateTime = performance.now();
 
   setStableWindowState("stableWindowWidthUpdateToken");
-  const stableWindowWidth = getState().stableWindowWidth;
 
   for (const el of pendingHiddenElements) {
-    // If the window width is same since we last updated this element, we maintain the values that were set on last update. Flush is cancelled.
-    if (windowWidthIsSameSinceLastElementUpdate(el, stableWindowWidth))
-      continue;
-
-    updateElement(el); //Flushes hidden element to its default value
+    updateElement(el, breakpoints); //Flushes hidden element to its default value
     pendingHiddenElements.delete(el);
   }
 
   for (const el of visibleElements) {
-    updateElement(el);
+    updateElement(el, breakpoints);
   }
 
   computedStyleCache.clear();
   boundingClientRectCache.clear();
-  requestAnimationFrame(update);
+  requestAnimationFrame(updateWithState);
+}
+
+function updateWithState(): void {
+  update(getState().breakpoints);
 }
 
 /** If the stable window width didn't change since we updated this element, we don't re-update the element (style stays the same)
  */
-export function windowWidthIsSameSinceLastElementUpdate(
+function windowWidthIsSameSinceLastElementUpdate(
   el: HTMLElement,
   stableWindowWidth: number
 ): boolean {
@@ -45,7 +44,7 @@ export function windowWidthIsSameSinceLastElementUpdate(
   return Math.abs(el.updateWidth - stableWindowWidth) < 1;
 }
 
-export function updateElement(el: HTMLElement): void {
+function updateElement(el: HTMLElement, breakpoints: number[]): void {
   if (!el.isConnected) {
     visibleElements.delete(el);
     pendingHiddenElements.delete(el);
@@ -56,7 +55,7 @@ export function updateElement(el: HTMLElement): void {
   if (el.updateTime === updateTime) return;
   el.updateTime = updateTime;
 
-  if (el.fluidProperties) updateFluidProperties(el);
+  updateFluidProperties(el, breakpoints);
 
   if (el.states) {
     for (const state of el.states) {
@@ -65,7 +64,7 @@ export function updateElement(el: HTMLElement): void {
   }
 }
 
-function updateFluidProperties(el: HTMLElement): void {
+function updateFluidProperties(el: HTMLElement, breakpoints: number[]): void {
   if (el.isHidden) {
     /** If the element is considered hidden, we do not update the fluid state, and on next state apply, the style is kept at its default value */
     el.updateTime = undefined;
@@ -73,7 +72,7 @@ function updateFluidProperties(el: HTMLElement): void {
   }
 
   for (const fluidProperty of el.fluidProperties || []) {
-    fluidProperty.update();
+    fluidProperty.update(breakpoints);
   }
 
   el.updateWidth = getState().stableWindowWidth;
@@ -109,6 +108,7 @@ function applyStyle(el: HTMLElement, state: FluidPropertyState): void {
       fluidProperty,
       orderID,
       calcedSizePercentEl,
+      windowWidth: window.innerWidth,
     };
 
   handleCalcSizePercent(calcedSizePercentEl);
@@ -135,7 +135,14 @@ function handleCalcSizePercent(
   }
 }
 
-export function applyStateForProperty(el: HTMLElement, property: string): void {
+function applyStateForProperty(el: HTMLElement, property: string): void {
   const state = el.statesByProperty?.[property];
   if (state?.fluidProperty) applyState(el, state);
 }
+
+export {
+  updateWithState,
+  windowWidthIsSameSinceLastElementUpdate,
+  updateElement,
+  applyStateForProperty,
+};

@@ -1,29 +1,29 @@
 import {
-  DeepReadonly,
   FluidRangeMetaData,
   FluidRangesByAnchor,
-  IFluidBreakpointRange,
+  IFluidRange,
+  IFluidRangeComputation,
 } from "../index.types";
 import { FluidProperty } from "./fluidProperty";
 
-export interface IConfig {}
+interface IConfig {}
 
-export interface IState {
-  fluidRangesByAnchor: DeepReadonly<FluidRangesByAnchor>;
-  breakpoints: readonly number[];
+interface IState {
+  fluidRangesByAnchor: FluidRangesByAnchor;
+  breakpoints: number[];
   stableWindowWidth: number;
   stableWindowHeight: number;
   isMutationObserverInitialized: boolean;
   isIntersectionObserverInitialized: boolean;
 }
 
-export interface IFluidProperty {
+interface IFluidProperty {
   metaData: FluidRangeMetaData;
   state: FluidPropertyState;
   update(breakpoints: number[]): void;
 }
 
-export type FluidPropertyState = {
+type FluidPropertyState = {
   property: string;
   value: string;
   fluidProperty: FluidProperty | null;
@@ -33,33 +33,54 @@ export type FluidPropertyState = {
   appliedState?: AppliedFluidPropertyState;
 };
 
-export type AppliedFluidPropertyState = {
+type AppliedFluidPropertyState = {
   value: string;
   fluidProperty: FluidProperty;
   orderID: number;
   calcedSizePercentEl?: HTMLElement;
+  windowWidth: number;
 };
 
-export type FluidPropertyConfig = {
+type FluidPropertyConfig = Readonly<{
   el: HTMLElement;
   metaData: FluidRangeMetaData;
-  fluidBreakpoints: (IFluidBreakpointRange | null)[];
-};
-
-export type ComputationParamsBase = Readonly<{
-  progress: number;
-  fluidRange: IFluidBreakpointRange;
+  fluidBreakpoints: (IFluidRange | null)[];
 }>;
 
-export type ComputationParams = ComputationParamsBase &
+type ComputationParamsBase = Pick<IState, "breakpoints"> &
+  Readonly<{
+    progress: number;
+    fluidRange: IFluidRangeComputation;
+  }>;
+
+type ComputationParams = ComputationParamsBase &
   Readonly<{
     el: HTMLElement;
     property: string;
   }>;
 
-export type InsertFluidPropertyParams = Readonly<{
+type ValueArrayParams = Readonly<{
+  minValuePx: number | number[];
+  maxValuePx: number | number[];
+  progress: number;
+  locks?: number[] | undefined;
+}>;
+
+type InsertFluidPropertyParams = Readonly<{
   el: HTMLElement;
   metaData: FluidRangeMetaData;
-  fluidRanges: readonly DeepReadonly<IFluidBreakpointRange>[];
-  breakpoints: readonly number[];
+  fluidRanges: IFluidRange[];
+  breakpoints: number[];
 }>;
+
+export {
+  IConfig,
+  IState,
+  IFluidProperty,
+  FluidPropertyState,
+  FluidPropertyConfig,
+  ComputationParamsBase,
+  ComputationParams,
+  ValueArrayParams,
+  InsertFluidPropertyParams,
+};
