@@ -1,72 +1,13 @@
-import { Calc, CalcUnits, IFluidValue } from "../../index.types";
-import { ComputationParams, ValueArrayParams } from "../engine.types";
+import { IFluidValue, Function, FunctionUnits } from "../../index.types";
+import { ComputationParams } from "../engine.types";
+import { PROPERTY_REDIRECTS } from "../shared";
 import { FluidValueComputationState } from "./computation.types";
 import { convertToPixels } from "./unitsConversion";
 
-export function computeValueForRange(
-  params: ComputationParams
-): number | number[] {
-  const { progress, fluidRange } = params;
-  if (progress >= 1) {
-    return computeFluidValue(fluidRange.maxValue, params);
-  } else {
-    let minValuePx = computeFluidValue(fluidRange.minValue, params);
-
-    if (fluidRange.locks === "all") {
-      return minValuePx;
-    }
-
-    let maxValuePx = computeFluidValue(fluidRange.maxValue, params);
-
-    if (Array.isArray(minValuePx) || Array.isArray(maxValuePx)) {
-      return calcValueArrayFromProgress({
-        minValuePx,
-        maxValuePx,
-        progress,
-        locks: fluidRange.locks,
-      });
-    }
-
-    return calcValueFromProgress(minValuePx, maxValuePx, progress);
-  }
-}
-
-function calcValueArrayFromProgress(params: ValueArrayParams): number[] {
-  const { minValuePx, maxValuePx, progress, locks } = params;
-
-  const minValuePxArray: number[] = Array.isArray(minValuePx)
-    ? minValuePx
-    : [minValuePx];
-
-  const maxValuePxArray: number[] = Array.isArray(maxValuePx)
-    ? maxValuePx
-    : [maxValuePx];
-
-  return minValuePxArray.map((value, index) => {
-    if (locks?.includes(index)) {
-      return value;
-    }
-
-    const maxValue =
-      maxValuePxArray.length > index
-        ? maxValuePxArray[index]
-        : maxValuePxArray[maxValuePxArray.length - 1];
-    return calcValueFromProgress(value, maxValue, progress);
-  });
-}
-
-function calcValueFromProgress(
-  minValue: number,
-  maxValue: number,
-  progress: number
-) {
-  return minValue + (maxValue - minValue) * progress;
-}
-
-function computeFluidValue(
-  fluidValue: IFluidValue | IFluidValue[],
+export function computeFluidValue(
+  fluidValue: IFluidValue | (IFluidValue | ",")[],
   state: ComputationParams
-): number | number[] {
+): number | string | (number | string)[] {
   const { el, property } = state;
   const isSingleValue = !Array.isArray(fluidValue);
   if (isSingleValue) {
@@ -80,6 +21,7 @@ function computeFluidValue(
     return computeValue(fluidValue.value, fluidValue.unit, state);
   } else {
     return fluidValue.map((value) => {
+      if (value === ",") return value;
       return computeValue(value.value, value.unit, state);
     });
   }
@@ -90,10 +32,12 @@ function computeGridTemplateValue(
   property: string,
   value: string
 ): number[] {
+  const prevValue = el.style.getPropertyValue(property);
   el.style.setProperty(property, value);
 
   const computedStyle = window.getComputedStyle(el);
   const gridTemplate = computedStyle.getPropertyValue(property);
+  el.style.setProperty(property, prevValue);
   const gridTemplateArray = gridTemplate.split(" ");
   const gridTemplateValues = gridTemplateArray.map((value) => {
     return parseFloat(value);
@@ -102,17 +46,21 @@ function computeGridTemplateValue(
 }
 
 function computeValue(
-  value: number | Calc | string,
-  unit: string | CalcUnits,
+  value: number | Function | string,
+  unit: string | FunctionUnits,
   computationState: FluidValueComputationState
-): number {
+): number | string {
   if (typeof value === "number" && typeof unit === "string") {
     return convertToPixels(value, unit, computationState);
   }
 
   if (typeof value === "string") {
     const { el, property } = computationState;
-    return measureKeywordValue(el, property, value);
+    return measureKeywordValue(
+      el,
+      PROPERTY_REDIRECTS.get(property) || property,
+      value
+    );
   }
   if (typeof value === "object" && typeof unit === "object") {
     return computeCalc(value, unit, computationState);
@@ -122,33 +70,36 @@ function computeValue(
 }
 
 function measureKeywordValue(
-  element: HTMLElement,
+  el: HTMLElement,
   property: string,
   keyword: string
-): number {
-  element.style.setProperty(property, keyword);
+): number | string {
+  if (property.startsWith("margin-") && keyword === "auto") return "auto";
 
-  let value: number;
-  if (property === "width" || property === "height") {
-    value = element.getBoundingClientRect()[property];
-  } else {
-    const px = window.getComputedStyle(element).getPropertyValue(property);
-    value = parseFloat(px) || 0;
-  }
+  const prevValue = el.style.getPropertyValue(property);
+  el.style.setProperty(property, keyword);
 
-  return value;
+  const px = window.getComputedStyle(el).getPropertyValue(property);
+
+  el.style.setProperty(property, prevValue);
+
+  return parseFloat(px) || px;
 }
 
 function computeCalc(
-  calc: Calc,
-  unit: CalcUnits,
+  calc: Function,
+  unit: FunctionUnits,
   state: FluidValueComputationState
 ): number {
   if (calc.type === "calc") return evaluateCalc(calc.values, unit.units, state);
 
-  const values = calc.values.map((value, index) =>
-    computeValue(value, unit.units[index], state)
-  );
+  const values = calc.values.map((value, index) => {
+    value = computeValue(value, unit.units[index], state);
+    if (value === "none") throw Error("None in calc");
+
+    return value as number;
+  });
+
   switch (calc.type) {
     case "min":
       return Math.min(...values);
@@ -167,12 +118,13 @@ function isArithmetic(value: string): boolean {
 }
 
 function evaluateCalc(
-  values: (string | number | Calc)[],
-  units: (string | CalcUnits)[],
+  values: (string | number | Function)[],
+  units: (string | FunctionUnits)[],
   state: FluidValueComputationState
 ): number {
   const expression = values
     .map((value, index) => {
+      if (value === "none") throw Error("None in calc");
       if (typeof value === "string" && isArithmetic(value)) return value;
 
       return computeValue(value, units[index], state);
@@ -180,6 +132,7 @@ function evaluateCalc(
     .join("");
 
   if (!/^[\d+\-*/().\s]+$/.test(expression)) {
+    console.log(expression);
     throw new Error("Unsafe expression");
   }
 

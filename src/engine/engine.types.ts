@@ -15,12 +15,15 @@ interface IState {
   stableWindowHeight: number;
   isMutationObserverInitialized: boolean;
   isIntersectionObserverInitialized: boolean;
+  allElements: Set<Element>;
+  visibleElements: Set<HTMLElement>;
+  pendingHiddenElements: Set<HTMLElement>;
 }
 
 interface IFluidProperty {
   metaData: FluidRangeMetaData;
   state: FluidPropertyState;
-  update(breakpoints: number[]): void;
+  update(): void;
 }
 
 type FluidPropertyState = {
@@ -38,7 +41,6 @@ type AppliedFluidPropertyState = {
   fluidProperty: FluidProperty;
   orderID: number;
   calcedSizePercentEl?: HTMLElement;
-  windowWidth: number;
 };
 
 type FluidPropertyConfig = Readonly<{
@@ -47,11 +49,10 @@ type FluidPropertyConfig = Readonly<{
   fluidBreakpoints: (IFluidRange | null)[];
 }>;
 
-type ComputationParamsBase = Pick<IState, "breakpoints"> &
-  Readonly<{
-    progress: number;
-    fluidRange: IFluidRangeComputation;
-  }>;
+type ComputationParamsBase = Readonly<{
+  progress: number;
+  fluidRange: IFluidRangeComputation;
+}>;
 
 type ComputationParams = ComputationParamsBase &
   Readonly<{
@@ -59,19 +60,17 @@ type ComputationParams = ComputationParamsBase &
     property: string;
   }>;
 
-type ValueArrayParams = Readonly<{
-  minValuePx: number | number[];
-  maxValuePx: number | number[];
-  progress: number;
-  locks?: number[] | undefined;
-}>;
-
 type InsertFluidPropertyParams = Readonly<{
   el: HTMLElement;
   metaData: FluidRangeMetaData;
   fluidRanges: IFluidRange[];
   breakpoints: number[];
 }>;
+
+type InlineStyleController = {
+  /** Undo the styles applied by this batch. This will apply the previous batch, if any. */
+  undo: () => void;
+};
 
 export {
   IConfig,
@@ -81,6 +80,6 @@ export {
   FluidPropertyConfig,
   ComputationParamsBase,
   ComputationParams,
-  ValueArrayParams,
   InsertFluidPropertyParams,
+  InlineStyleController,
 };

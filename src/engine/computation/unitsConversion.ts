@@ -1,8 +1,8 @@
 import { FluidValueComputationState } from "./computation.types";
 import {
   getBoundingClientRect,
-  getStableWindowHeight,
-  getStableWindowWidth,
+  getState,
+  getComputedStyle,
 } from "../instance/state";
 import { applyStateForProperty, updateElement } from "../instance/update";
 
@@ -28,6 +28,12 @@ export function convertToPixels(
       return (value / 100) * window.innerWidth;
     case "vh":
       return (value / 100) * window.innerHeight;
+    case "rad":
+      return (value * 180) / Math.PI;
+    case "grad":
+      return value * 0.9;
+    case "turn":
+      return value * 360;
     case "vmin":
       return (value / 100) * Math.min(window.innerWidth, window.innerHeight);
     case "vmax":
@@ -53,19 +59,17 @@ export function convertToPixels(
     case "rlh":
       return calcLineHeight(window.document.documentElement, value);
     case "dvw":
-      return (value / 100) * getStableWindowWidth();
+      return (value / 100) * getState().stableWindowWidth;
     case "dvh":
-      return (value / 100) * getStableWindowHeight();
-    case "dvmin":
-      return (
-        (value / 100) *
-        Math.min(getStableWindowWidth(), getStableWindowHeight())
-      );
-    case "dvmax":
-      return (
-        (value / 100) *
-        Math.max(getStableWindowWidth(), getStableWindowHeight())
-      );
+      return (value / 100) * getState().stableWindowHeight;
+    case "dvmin": {
+      const { stableWindowWidth, stableWindowHeight } = getState();
+      return (value / 100) * Math.min(stableWindowWidth, stableWindowHeight);
+    }
+    case "dvmax": {
+      const { stableWindowWidth, stableWindowHeight } = getState();
+      return (value / 100) * Math.max(stableWindowWidth, stableWindowHeight);
+    }
   }
 
   return value;
@@ -75,10 +79,10 @@ function calcEmValue(
   value: number,
   computationState: FluidValueComputationState
 ): number {
-  const { el, property, breakpoints } = computationState;
+  const { el, property } = computationState;
   if (property === "font-size") {
     const parent = el.parentElement || document.documentElement;
-    updateElement(parent, breakpoints);
+    updateElement(parent);
     return value * parseFloat(getComputedStyle(parent).fontSize);
   } else {
     applyStateForProperty(el, "font-size");
@@ -90,7 +94,7 @@ function calcPercentValue(
   value: number,
   computationState: FluidValueComputationState
 ): number {
-  const { el, property, breakpoints } = computationState;
+  const { el, property } = computationState;
 
   const parent = el.parentElement || document.documentElement;
 
@@ -105,7 +109,7 @@ function calcPercentValue(
     case "border-left-width":
     case "border-right-width":
       el.calcedSizePercentEl = parent;
-      return calcHorizontalPercentValue(value, parent, breakpoints);
+      return calcHorizontalPercentValue(value, parent);
 
     case "height":
     case "top":
@@ -117,10 +121,18 @@ function calcPercentValue(
     case "border-top-width":
     case "border-bottom-width":
       el.calcedSizePercentEl = parent;
-      return calcVerticalPercentValue(value, parent, breakpoints);
+      return calcVerticalPercentValue(value, parent);
+
+    case "background-position-x":
+      el.calcedSizePercentEl = el;
+      return calcHorizontalPercentValue(value, el);
+
+    case "background-position-y":
+      el.calcedSizePercentEl = el;
+      return calcVerticalPercentValue(value, el);
 
     case "font-size":
-      return calcFontSizePercentValue(value, parent, breakpoints);
+      return calcFontSizePercentValue(value, parent);
 
     case "line-height":
       return calcLineHeightPercentValue(value, el);
@@ -130,10 +142,9 @@ function calcPercentValue(
 
 function calcHorizontalPercentValue(
   value: number,
-  parent: HTMLElement,
-  breakpoints: number[]
+  parent: HTMLElement
 ): number {
-  updateElement(parent, breakpoints);
+  updateElement(parent);
   const parentRect = getBoundingClientRect(parent);
   const parentStyle = getComputedStyle(parent);
   const [paddingLeft, paddingRight] = [
@@ -144,12 +155,8 @@ function calcHorizontalPercentValue(
   return (value / 100) * parentWidth;
 }
 
-function calcVerticalPercentValue(
-  value: number,
-  parent: HTMLElement,
-  breakpoints: number[]
-): number {
-  updateElement(parent, breakpoints);
+function calcVerticalPercentValue(value: number, parent: HTMLElement): number {
+  updateElement(parent);
   const parentRect = getBoundingClientRect(parent);
   const parentStyle = getComputedStyle(parent);
   const [paddingTop, paddingBottom] = [
@@ -160,12 +167,8 @@ function calcVerticalPercentValue(
   return (value / 100) * parentHeight;
 }
 
-function calcFontSizePercentValue(
-  value: number,
-  parent: HTMLElement,
-  breakpoints: number[]
-): number {
-  updateElement(parent, breakpoints);
+function calcFontSizePercentValue(value: number, parent: HTMLElement): number {
+  updateElement(parent);
   const parentStyle = getComputedStyle(parent);
   const parentFontSize = parseFloat(parentStyle.fontSize);
   return (value / 100) * parentFontSize;

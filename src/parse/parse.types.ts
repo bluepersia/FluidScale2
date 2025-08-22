@@ -1,5 +1,6 @@
 import {
   Expand,
+  FluidPropertyData,
   FluidRangesByAnchor,
   IFluidRange,
   IFluidValue,
@@ -60,6 +61,8 @@ type FluidPropertyParams = Pick<
     ruleSpans: RuleSpans;
     order: number;
     lockVarValue: string;
+    isMarkedAsDynamic: boolean;
+    force: string[];
   }> & {
     fluidRangesByAnchor: FluidRangesByAnchor;
   };
@@ -81,6 +84,8 @@ type SelectorParams = Pick<
   | "fluidRangesByAnchor"
   | "breakpoints"
   | "lockVarValue"
+  | "isMarkedAsDynamic"
+  | "force"
 > &
   Readonly<{
     selector: string;
@@ -104,11 +109,13 @@ type MinMaxValueParams = Pick<
   | "index"
   | "batch"
   | "spanEnd"
+  | "isMarkedAsDynamic"
+  | "force"
 >;
 
 type MinMaxValueResult = {
-  minValue: IFluidValue | IFluidValue[];
-  maxValue: IFluidValue | IFluidValue[];
+  minValue: IFluidValue | (IFluidValue | ",")[];
+  maxValue: IFluidValue | (IFluidValue | ",")[];
   maxValueBatchWidth: number;
   fluidRanges: IFluidRange[];
 };
@@ -121,8 +128,34 @@ type FluidRangeParams = Pick<
 
 type FluidRangesParams = Pick<
   SelectorParams,
-  "selector" | "property" | "order" | "fluidRangesByAnchor"
+  | "selector"
+  | "property"
+  | "order"
+  | "fluidRangesByAnchor"
+  | "isMarkedAsDynamic"
 >;
+
+type WriteFluidPropertyParams = Pick<
+  FluidRangesParams,
+  "fluidRangesByAnchor" | "property" | "order"
+> &
+  Readonly<{
+    anchor: string;
+    strippedSelector: string;
+    dynamicSelector: string | undefined;
+  }>;
+
+type FluidPropertiesStorage = {
+  [property: string]: FluidPropertyData;
+};
+
+type MakeFluidPropertyDataParams = Pick<
+  WriteFluidPropertyParams,
+  "fluidRangesByAnchor" | "property" | "order" | "dynamicSelector"
+> &
+  Readonly<{
+    fluidProperties: FluidPropertiesStorage;
+  }>;
 
 type MaxValueParams = Pick<SelectorParams, "property" | "selector"> &
   Pick<StyleRuleParams, "batches" | "index"> &
@@ -131,13 +164,20 @@ type MaxValueParams = Pick<SelectorParams, "property" | "selector"> &
   }>;
 
 type MaxValueResult = {
-  maxValue: IFluidValue | IFluidValue[];
+  maxValue: IFluidValue | (IFluidValue | ",")[];
   maxValueBatchWidth: number;
 };
 type NextBatchParams = Pick<MaxValueParams, "selector" | "property" | "batch"> &
   Readonly<{
     nextBatch: StyleBatch;
   }>;
+
+type ProcessShadowValueState = {
+  numCount: number;
+  shadowMap: Map<string, number>;
+  type: "box" | "text";
+  result: Map<string, number>[];
+};
 
 export {
   StyleBatch,
@@ -156,4 +196,8 @@ export {
   MaxValueResult,
   NextBatchParams,
   RuleSpans,
+  WriteFluidPropertyParams,
+  MakeFluidPropertyDataParams,
+  FluidPropertiesStorage,
+  ProcessShadowValueState,
 };

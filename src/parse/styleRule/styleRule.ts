@@ -1,19 +1,18 @@
 import {
   StyleRuleParams,
   SelectorParams,
-  FluidRangesParams,
-  FluidRangeParams,
   FluidPropertyParams,
-} from "./parse.types";
-import { IFluidRange } from "../index.types";
-import { getFluidRangeBlueprint } from "./values";
+} from "../parse.types";
+import { IFluidRange } from "../../index.types";
+import { getFluidRangeBlueprint } from "../values/minMaxRange";
 import {
   applySpan,
   getRuleSpans,
   getSpanEndValue,
   getSpanFlags,
-  parseLocks,
-} from "./specialCases";
+  makeForceList,
+} from "../specialCases";
+import { makeFluidRange } from "./fluidRangeGetMaker";
 
 const FLUID_PROPERTY_NAMES = [
   "font-size",
@@ -43,6 +42,11 @@ const FLUID_PROPERTY_NAMES = [
   "height",
   "min-height",
   "max-height",
+  "grid-template-columns",
+  "grid-template-rows",
+  "background-position-x",
+  "background-position-y",
+  "--fluid-bg-size",
 ];
 
 const SHORTHAND_PROPERTY_NAMES = [
@@ -50,15 +54,18 @@ const SHORTHAND_PROPERTY_NAMES = [
   "margin",
   "border",
   "border-radius",
+  "background-position",
 ];
 
 function processStyleRule(params: StyleRuleParams): void {
   const { rule, documentState } = params;
   documentState.order++;
 
+  const isMarkedAsDynamic =
+    rule.style.getPropertyValue("--fluid-dynamic") === "true";
   const ruleSpans = getRuleSpans(rule);
   const lockVarValue = rule.style.getPropertyValue("--fluid-lock");
-
+  const force = makeForceList(rule.style.getPropertyValue("--fluid-force"));
   for (const property of FLUID_PROPERTY_NAMES) {
     parseFluidProperty({
       property,
@@ -66,6 +73,8 @@ function processStyleRule(params: StyleRuleParams): void {
       ...documentState,
       ruleSpans,
       lockVarValue,
+      isMarkedAsDynamic,
+      force,
     });
   }
 }
@@ -74,6 +83,8 @@ function parseFluidProperty(params: FluidPropertyParams): void {
   const { property, ruleSpans, rule, spans } = params;
 
   if (SHORTHAND_PROPERTY_NAMES.includes(property)) return;
+
+  if (skipBackgroundSize(property, rule.style)) return;
 
   const { isSpanStart, isSpanEnd } = getSpanFlags(property, ruleSpans);
 
@@ -90,6 +101,16 @@ function parseFluidProperty(params: FluidPropertyParams): void {
       spanEnd,
     });
   }
+}
+
+function skipBackgroundSize(
+  property: string,
+  style: CSSStyleDeclaration
+): boolean {
+  return (
+    property === "background-size" &&
+    style.getPropertyValue("--fluid-bg-size").length > 0
+  );
 }
 
 function splitSelector(selector: string): string[] {
@@ -116,57 +137,4 @@ function processSelector(params: SelectorParams): void {
   fluidRangeBlueprint.fluidRanges.push(fluidRange);
 }
 
-function makeFluidRange(params: FluidRangeParams): IFluidRange {
-  const {
-    property,
-    batch: { width },
-    breakpoints,
-    maxValueBatchWidth,
-    lockVarValue,
-  } = params;
-
-  const locks = parseLocks(lockVarValue, property);
-
-  const fluidRange: IFluidRange = {
-    ...params,
-    minIndex: breakpoints.indexOf(width),
-    maxIndex: breakpoints.indexOf(maxValueBatchWidth),
-  };
-  if (locks) {
-    fluidRange.locks = locks;
-  }
-  return fluidRange;
-}
-
-function getFluidRanges(params: FluidRangesParams): IFluidRange[] {
-  const { selector, property, order, fluidRangesByAnchor } = params;
-  const strippedSelector = stripModifiers(selector);
-  const dynamicSelector = strippedSelector === selector ? undefined : selector;
-  const selectorSegments = strippedSelector.split(" ");
-  const anchor = selectorSegments[selectorSegments.length - 1];
-
-  let fluidRangesBySelector = fluidRangesByAnchor[anchor];
-
-  if (!fluidRangesBySelector) {
-    params.fluidRangesByAnchor[anchor] = fluidRangesBySelector = {
-      [strippedSelector]: [{ property, orderID: order, dynamicSelector }, []],
-    };
-  }
-  return fluidRangesBySelector[selector][1];
-}
-
-function stripModifiers(selectorText: string): string {
-  return (
-    selectorText
-      // remove BEM modifiers (anything starting with `--` until next non-name char)
-      .replace(/--[a-zA-Z0-9_-]+/g, "")
-      // remove common dynamic pseudos
-      .replace(
-        /:(hover|focus|active|visited|disabled|checked|focus-visible|focus-within)/g,
-        ""
-      )
-      .trim()
-  );
-}
-
-export { processStyleRule, splitSelector, getFluidRanges };
+export { processStyleRule, splitSelector };
