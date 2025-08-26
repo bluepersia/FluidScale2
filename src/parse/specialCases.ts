@@ -1,6 +1,13 @@
 // SPANS //
 
-import { RuleSpans, SpanParams, Spans } from "./parse.types";
+import { IFluidValue } from "../index.types";
+import {
+  ProcessShadowValueState,
+  RuleSpans,
+  SpanParams,
+  Spans,
+} from "./parse.types";
+import { Function } from "../index.types";
 
 function getRuleSpans(rule: CSSStyleRule): {
   spanStarts: string[];
@@ -79,4 +86,179 @@ function parseLocks(
   return locks;
 }
 
-export { getRuleSpans, getSpanFlags, getSpanEndValue, applySpan, parseLocks };
+function makeForceList(forceVarValue: string): string[] {
+  const result =
+    forceVarValue
+      .split(",")
+      .map((prop) => prop.trim())
+      .filter((prop) => prop !== "") || [];
+  result.push("--fluid-bg-size");
+  return result;
+}
+
+function makeValueIndexMap(
+  property: string,
+  minValue: IFluidValue | (IFluidValue | ",")[],
+  maxValue: IFluidValue | (IFluidValue | ",")[]
+): Map<number, number> | undefined {
+  if (
+    property === "box-shadow" ||
+    property === "text-shadow" ||
+    property === "transform" ||
+    property === "filter"
+  ) {
+    minValue = Array.isArray(minValue) ? minValue : [minValue];
+    maxValue = Array.isArray(maxValue) ? maxValue : [maxValue];
+
+    const [minValueMaps, maxValueMaps] = makeMinMaxValueMaps(
+      property,
+      minValue,
+      maxValue
+    );
+
+    if (minValueMaps && maxValueMaps) {
+      return newValueIndexMapFromMinMax(minValueMaps, maxValueMaps);
+    }
+  }
+}
+
+function makeMinMaxValueMaps(
+  property: string,
+  minValue: (IFluidValue | ",")[],
+  maxValue: (IFluidValue | ",")[]
+): [Map<string, number>[], Map<string, number>[]] {
+  let minValueMaps: Map<string, number>[] = [];
+  let maxValueMaps: Map<string, number>[] = [];
+
+  if (property === "box-shadow") {
+    minValueMaps = makeBoxShadowValueIndexMaps(minValue);
+    maxValueMaps = makeBoxShadowValueIndexMaps(maxValue);
+  }
+  if (property === "text-shadow") {
+    minValueMaps = makeTextShadowValueIndexMaps(minValue);
+    maxValueMaps = makeTextShadowValueIndexMaps(maxValue);
+  }
+  if (property === "transform" || property === "filter") {
+    minValueMaps = makeGraphicsPropertyValueIndexMaps(minValue);
+    maxValueMaps = makeGraphicsPropertyValueIndexMaps(maxValue);
+  }
+
+  return [minValueMaps, maxValueMaps];
+}
+
+function newValueIndexMapFromMinMax(
+  minValueMaps: Map<string, number>[],
+  maxValueMaps: Map<string, number>[]
+): Map<number, number> {
+  const valueMap = new Map<number, number>();
+  for (const [i, minValueMap] of minValueMaps.entries()) {
+    if (i >= maxValueMaps.length) break;
+
+    const maxValueMap = maxValueMaps[i];
+    for (const [key, value] of Object.entries(minValueMap)) {
+      if (maxValueMap.has(key)) {
+        const maxValueNum = maxValueMap.get(key);
+        if (maxValueNum) valueMap.set(value, maxValueNum);
+      }
+    }
+  }
+
+  return valueMap;
+}
+
+function makeBoxShadowValueIndexMaps(
+  shadows: (IFluidValue | ",")[]
+): Map<string, number>[] {
+  const result: Map<string, number>[] = [];
+
+  let numCount = 0;
+  let boxShadowMap: Map<string, number> = new Map();
+  const state = {
+    numCount,
+    shadowMap: boxShadowMap,
+    type: "box" as const,
+    result,
+  };
+  for (const [i, part] of shadows.entries()) {
+    processShadowValue(state, part, i);
+  }
+  result.push(boxShadowMap);
+
+  return result;
+}
+
+function makeTextShadowValueIndexMaps(
+  shadows: (IFluidValue | ",")[]
+): Map<string, number>[] {
+  const result: Map<string, number>[] = [];
+
+  let numCount = 0;
+  let textShadowMap: Map<string, number> = new Map();
+  const state = {
+    numCount,
+    shadowMap: textShadowMap,
+    type: "text" as const,
+    result,
+  };
+  for (const [i, part] of shadows.entries()) {
+    processShadowValue(state, part, i);
+  }
+  result.push(textShadowMap);
+
+  return result;
+}
+
+function processShadowValue(
+  state: ProcessShadowValueState,
+  part: IFluidValue | ",",
+  index: number
+): void {
+  const { numCount, shadowMap, type, result } = state;
+  if (part === ",") {
+    state.numCount = 0;
+    result.push(shadowMap);
+    state.shadowMap = new Map<string, number>();
+    return;
+  }
+  if (type === "box" && part.value === "inset") shadowMap.set("inset", index);
+  else if (typeof part.value === "number") {
+    if (numCount === 0) shadowMap.set("xOffset", index);
+    else if (numCount === 1) shadowMap.set("yOffset", index);
+    else if (numCount === 2) shadowMap.set("blur", index);
+    else if (type === "box" && numCount === 3) shadowMap.set("spread", index);
+    state.numCount++;
+  } else if (typeof part.value === "string") {
+    shadowMap.set("color", index);
+  }
+}
+
+function makeGraphicsPropertyValueIndexMaps(
+  values: (IFluidValue | ",")[]
+): Map<string, number>[] {
+  const result: Map<string, number>[] = [];
+
+  let currentMap: Map<string, number> = new Map();
+  for (const [i, part] of values.entries()) {
+    if (part === ",") {
+      result.push(currentMap);
+      currentMap = new Map();
+    } else if (typeof part.value === "object" && "type" in part.value) {
+      const calcType = (part.value as Function).type;
+      currentMap.set(calcType, i);
+    }
+  }
+
+  return result;
+}
+
+export {
+  getRuleSpans,
+  getSpanFlags,
+  getSpanEndValue,
+  applySpan,
+  parseLocks,
+  makeForceList,
+  makeBoxShadowValueIndexMaps as makeBoxShadowValueMaps,
+  makeTextShadowValueIndexMaps as makeTextShadowValueMaps,
+  makeValueIndexMap,
+};

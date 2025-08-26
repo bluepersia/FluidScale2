@@ -1,6 +1,6 @@
 import { StyleBatch, BatchState, StylesheetParams } from "./parse.types";
 import { ParsedDocument } from "../index.types";
-import { processStyleRule } from "./styleRule";
+import { processStyleRule } from "./styleRule/styleRule";
 
 export function parseDocument(document: Document): ParsedDocument | null {
   if (!isStyleSheetsAccessible(document)) {

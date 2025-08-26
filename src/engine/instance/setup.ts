@@ -1,30 +1,41 @@
 import { FluidRangeMetaData, IFluidRange } from "../../index.types";
 import { IFluidProperty, InsertFluidPropertyParams } from "../engine.types";
 import { FluidProperty } from "../fluidProperty";
-import { allElements, getState, intersectionObserver } from "./state";
+import {
+  addToAllElements,
+  getState,
+  intersectionObserverObserve,
+  removeFromAllElements,
+  intersectionObserverUnobserve,
+  removeFromPendingHiddenElements,
+  removeFromVisibleElements,
+} from "./state";
 
 export function addElements(els: HTMLElement[]): void {
+  const { allElements } = getState();
+
   for (const el of els) {
-    if (allElements.includes(el)) continue;
+    if (allElements.has(el)) continue;
 
     el.mainFluidProperties = {};
+    el.states = [];
 
     const classes = Array.from(el.classList);
 
-    for (const klass of classes) processAnchorFluidRanges(el, klass);
+    for (const klass of classes) processAnchorFluidRanges(el, `.${klass}`);
 
     if (el.id) {
-      processAnchorFluidRanges(el, el.id);
+      processAnchorFluidRanges(el, `#${el.id}`);
     }
 
     processAnchorFluidRanges(el, el.tagName.toLowerCase());
 
-    if (!el.fluidProperties) return;
+    if (!el.fluidProperties) continue;
     el.isFluid = true;
     sortFluidProperties(el.fluidProperties);
 
-    allElements.push(el);
-    intersectionObserver.observe(el);
+    addToAllElements(el, "allElementsAddToken");
+    intersectionObserverObserve(el, "intersectionObserverObserveToken");
   }
 }
 
@@ -35,7 +46,15 @@ function processAnchorFluidRanges(el: HTMLElement, anchor: string) {
 
   if (fluidRangesBySelector) {
     for (const entry of Object.entries(fluidRangesBySelector)) {
-      processFluidRangesForSelector(el, entry, breakpoints);
+      for (const [property, [metaData, fluidRanges]] of Object.entries(
+        entry[1]
+      )) {
+        processFluidRangesForSelector(
+          el,
+          [entry[0], [{ property, ...metaData }, fluidRanges]],
+          breakpoints
+        );
+      }
     }
   }
 }
@@ -125,4 +144,11 @@ function sortFluidProperties(
     // 3. Otherwise keep original order
     return 0;
   });
+}
+
+export function removeElement(el: HTMLElement): void {
+  removeFromVisibleElements(el, "visibleElementsRemoveToken");
+  removeFromPendingHiddenElements(el, "pendingHiddenElementsRemoveToken");
+  intersectionObserverUnobserve(el, "intersectionObserverUnobserveToken");
+  removeFromAllElements(el, "allElementsRemoveToken");
 }

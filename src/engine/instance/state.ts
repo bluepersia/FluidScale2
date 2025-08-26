@@ -9,6 +9,12 @@ const state: IState = {
   stableWindowHeight: getStableWindowHeight(),
   isMutationObserverInitialized: false,
   isIntersectionObserverInitialized: false,
+  /** Elements added to the engine. */
+  allElements: new Set<Element>(),
+  /** Elements that entered the viewport, and get fluidly updated each frame. */
+  visibleElements: new Set<HTMLElement>(),
+  /** Elements that exited the viewport, and are in the queue to get flushed back to their default values in the next frame update. */
+  pendingHiddenElements: new Set<HTMLElement>(),
 };
 
 function getState(): Readonly<IState> {
@@ -19,7 +25,6 @@ const config: IConfig = {
   emMode: "linear",
 };
 
-const allElements: Element[] = [];
 const computedStyleCache: Map<HTMLElement, CSSStyleDeclaration> = new Map();
 const boundingClientRectCache: Map<HTMLElement, DOMRect> = new Map();
 
@@ -33,11 +38,6 @@ const intersectionObserver: IntersectionObserver = new IntersectionObserver(
 );
 
 const resizeObserver: ResizeObserver = new ResizeObserver(handleResize);
-
-/** Elements that entered the viewport, and get fluidly updated each frame. */
-const visibleElements: Set<HTMLElement> = new Set();
-/** Elements that exited the viewport, and are in the queue to get flushed back to their default values in the next frame update. */
-const pendingHiddenElements: Set<HTMLElement> = new Set();
 
 function setInitState(
   fluidRangesByAnchor: FluidRangesByAnchor,
@@ -69,6 +69,68 @@ function setIntersectionObserverState(contextKey?: unknown) {
   }
 }
 
+function intersectionObserverObserve(el: Element, contextKey?: unknown) {
+  if (contextKey === "intersectionObserverObserveToken") {
+    intersectionObserver.observe(el);
+  }
+}
+
+function intersectionObserverUnobserve(el: Element, contextKey?: unknown) {
+  if (contextKey === "intersectionObserverUnobserveToken") {
+    intersectionObserver.unobserve(el);
+  }
+}
+
+function addToAllElements(el: Element, contextKey?: unknown): void {
+  if (contextKey === "allElementsAddToken") {
+    state.allElements.add(el);
+  }
+}
+
+function removeFromAllElements(el: Element, contextKey?: unknown): void {
+  if (contextKey === "allElementsRemoveToken") {
+    state.allElements.delete(el);
+  }
+}
+
+function addToVisibleElements(el: HTMLElement, contextKey?: unknown): void {
+  if (contextKey === "visibleElementsAddToken") {
+    state.visibleElements.add(el);
+  }
+}
+
+function removeFromVisibleElements(
+  el: HTMLElement,
+  contextKey?: unknown
+): void {
+  if (contextKey === "visibleElementsRemoveToken") {
+    state.visibleElements.delete(el);
+  }
+}
+
+function addToPendingHiddenElements(
+  el: HTMLElement,
+  contextKey?: unknown
+): void {
+  if (contextKey === "pendingHiddenElementsAddToken") {
+    state.pendingHiddenElements.add(el);
+  }
+}
+
+function removeFromPendingHiddenElements(
+  el: HTMLElement,
+  contextKey?: unknown
+): void {
+  if (contextKey === "pendingHiddenElementsRemoveToken") {
+    state.pendingHiddenElements.delete(el);
+  }
+}
+
+function resetCachesForEl(el: HTMLElement): void {
+  computedStyleCache.delete(el);
+  boundingClientRectCache.delete(el);
+}
+
 function getComputedStyle(el: HTMLElement): CSSStyleDeclaration {
   if (computedStyleCache.has(el)) {
     return computedStyleCache.get(el) as CSSStyleDeclaration;
@@ -98,11 +160,8 @@ function getStableWindowHeight(): number {
 export {
   getState,
   config,
-  allElements,
   intersectionObserver,
   resizeObserver,
-  visibleElements,
-  pendingHiddenElements,
   setInitState,
   setStableWindowState,
   setMutationObserverState,
@@ -113,4 +172,13 @@ export {
   boundingClientRectCache,
   getStableWindowWidth,
   getStableWindowHeight,
+  addToAllElements,
+  removeFromAllElements,
+  intersectionObserverObserve,
+  intersectionObserverUnobserve,
+  addToVisibleElements,
+  removeFromVisibleElements,
+  addToPendingHiddenElements,
+  removeFromPendingHiddenElements,
+  resetCachesForEl,
 };

@@ -2,32 +2,13 @@ import { FluidPropertyState, IFluidProperty } from "./engine/engine.types";
 
 type Expand<T> = T extends infer O ? { [K in keyof O]: O[K] } : never;
 
-/** Makes an object immutable. */
-type f<T> = {
-  readonly [K in keyof T]: T[K] extends (...args: any[]) => any // if it's a method, keep as-is
-    ? T[K]
-    : T[K] extends object // if it's an object, recurse
-    ? f<T[K]>
-    : T[K]; // primitive stays the same
-};
-
-type DM<T> = T extends (...args: any[]) => any
-  ? T // leave functions alone
-  : T extends ReadonlyArray<infer U> // handle arrays
-  ? DMArray<U>
-  : T extends object
-  ? { -readonly [K in keyof T]: DM<T[K]> }
-  : T;
-
-interface DMArray<T> extends Array<DM<T>> {}
-
 declare global {
   interface HTMLElement {
     fluidProperties?: IFluidProperty[];
     isFluid?: boolean;
     states?: FluidPropertyState[];
     statesByProperty?: { [property: string]: FluidPropertyState };
-    isHidden?: boolean;
+    isVisible?: boolean;
     visibleAtScrollPosition: [number, number];
     updateTime?: number;
     updateWidth?: number;
@@ -37,13 +18,16 @@ declare global {
     isObservingResize?: boolean;
     /** Temporary storage for the target parent of a percent calculation */
     calcedSizePercentEl?: HTMLElement;
+    inlineStyleBatches?: Record<string, string>[];
+    bgImageSizes?: ([number, number] | "loading")[];
   }
 }
 
 interface IFluidRangeComputation {
-  minValue: IFluidValue | IFluidValue[];
-  maxValue: IFluidValue | IFluidValue[];
+  minValue: IFluidValue | (IFluidValue | ",")[];
+  maxValue: IFluidValue | (IFluidValue | ",")[];
   locks?: number[] | "all";
+  valueIndexMap?: Map<number, number>;
 }
 
 /** A span of 2 breakpoints, from min to max */
@@ -60,8 +44,8 @@ type FluidRangeMetaData = {
 };
 
 interface IFluidValue {
-  value: number | Calc | string;
-  unit: string | CalcUnits | string;
+  value: number | Function | string;
+  unit: string | FunctionUnits | string;
 }
 
 type ParsedDocument = Readonly<{
@@ -74,27 +58,49 @@ type FluidRangesByAnchor = {
 };
 
 type FluidRangesBySelector = {
-  [selector: string]: [FluidRangeMetaData, IFluidRange[]];
+  [selector: string]: {
+    [property: string]: FluidPropertyData;
+  };
 };
 
-type Calc = {
-  type: "calc" | "min" | "max" | "clamp" | "minmax";
-  values: (number | Calc | string)[];
+type FluidPropertyData = [Omit<FluidRangeMetaData, "property">, IFluidRange[]];
+
+type Function = {
+  type: FunctionType | GraphicsFunctionType;
+  values: (number | Function | Exclude<string, "none">)[];
 };
-type CalcUnits = {
-  units: (string | CalcUnits)[];
+type FunctionUnits = {
+  units: (string | FunctionUnits)[];
 };
+
+type FunctionType = "calc" | "min" | "max" | "clamp" | "minmax";
+
+type GraphicsFunctionType =
+  | "translate"
+  | "translateX"
+  | "translateY"
+  | "translateZ"
+  | "rotate"
+  | "rotateX"
+  | "rotateY"
+  | "rotateZ"
+  | "skew"
+  | "skewX"
+  | "skewY"
+  | "scale"
+  | "scaleX"
+  | "scaleY"
+  | "scaleZ";
 
 export type {
   Expand,
-  f,
   IFluidRangeComputation,
   IFluidRange,
   FluidRangeMetaData,
   IFluidValue,
   ParsedDocument,
   FluidRangesByAnchor,
-  Calc,
-  CalcUnits,
-  DM,
+  Function,
+  FunctionUnits,
+  FluidPropertyData,
 };
