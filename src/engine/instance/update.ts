@@ -40,12 +40,16 @@ function updateElement(el: HTMLElement): void {
   if (el.updateTime === updateTime) return;
   el.updateTime = updateTime;
 
-  if (el.fluidProperties && el.isVisible) {
-    for (const fluidProperty of el.fluidProperties) {
-      fluidProperty.update();
-    }
+  if (el.fluidProperties) {
+    if (el.isVisible) {
+      for (const fluidProperty of el.fluidProperties) {
+        fluidProperty.update();
+      }
 
-    el.updateWidth = window.innerWidth;
+      el.updateWidth = window.innerWidth;
+    } else {
+      el.updateWidth = undefined; //Reset for hidden elements. It's at default values, so the last update width is based on stale values
+    }
   }
 
   if (el.states) {

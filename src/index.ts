@@ -10,7 +10,6 @@ import { setStyle as setStyleToEngine } from "./engine/instance/inlineStyles";
 export default function init(config: Partial<IConfig>): void {
   Object.assign(globalConfig, config);
   const parsedDocument = parseDocument(document);
-  console.log(parsedDocument);
   if (parsedDocument) {
     setInitState(
       parsedDocument.fluidRangesByAnchor,
@@ -19,12 +18,15 @@ export default function init(config: Partial<IConfig>): void {
     );
   }
   initMutationObserver();
+  const time = performance.now();
   addElements([
     document.body,
     ...Array.from(document.body.querySelectorAll("*")).filter(
       (el): el is HTMLElement => el instanceof HTMLElement
     ),
   ]);
+  const took = performance.now() - time;
+  document.body.innerHTML = `<h1>Parsed in ${took}ms</h1>`;
   requestAnimationFrame(update);
 }
 
